@@ -64,7 +64,7 @@ cc_defaults {
         "libinput",
         "libutils",
         "libSurfaceFlingerProp",
-        "libqdMetaData.system",
+        "//vendor/qcom/opensource/commonsys-intf/display:libqdMetaData.system",
         "vendor.qti.hardware.display.composer@2.0",
     ],
     static_libs: [
@@ -79,7 +79,7 @@ cc_defaults {
         "android.hardware.graphics.composer@2.1-command-buffer",
         "android.hardware.graphics.composer@2.2-command-buffer",
         "android.hardware.graphics.composer@2.3-command-buffer",
-        "display_intf_headers"
+        "//vendor/qcom/opensource/commonsys-intf/display:display_intf_headers"
     ],
     export_static_lib_headers: [
         "libcompositionengine",
