@@ -211,7 +211,6 @@ cc_binary {
     ],
 
     static_libs: [
-        "libartimagevalues",
         "libdiskusage",
         "libotapreoptparameters",
     ],
