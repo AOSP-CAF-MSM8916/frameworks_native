@@ -25,6 +25,7 @@
 #define ATRACE_TAG ATRACE_TAG_GRAPHICS
 
 #include "HWC2.h"
+#include "ComposerHal.h"
 
 #include <ui/Fence.h>
 #include <ui/FloatRect.h>
@@ -36,9 +37,6 @@
 #include <algorithm>
 #include <iterator>
 #include <set>
-
-#include "../Promise.h"
-#include "ComposerHal.h"
 
 namespace android {
 
@@ -646,14 +644,12 @@ Error Display::presentOrValidate(uint32_t* outNumTypes, uint32_t* outNumRequests
     return error;
 }
 
-std::future<Error> Display::setDisplayBrightness(float brightness) {
-    return promise::defer([composer = &mComposer, id = mId, brightness] {
-        const auto intError = composer->setDisplayBrightness(id, brightness);
-        return static_cast<Error>(intError);
-    });
+Error Display::setDisplayBrightness(float brightness) const {
+    const auto intError = mComposer.setDisplayBrightness(mId, brightness);
+    return static_cast<Error>(intError);
 }
 
-Error Display::setAutoLowLatencyMode(bool on) {
+Error Display::setAutoLowLatencyMode(bool on) const {
     auto intError = mComposer.setAutoLowLatencyMode(mId, on);
     return static_cast<Error>(intError);
 }
@@ -667,7 +663,7 @@ Error Display::getSupportedContentTypes(std::vector<ContentType>* outSupportedCo
     return static_cast<Error>(intError);
 }
 
-Error Display::setContentType(ContentType contentType) {
+Error Display::setContentType(ContentType contentType) const {
     auto intError = mComposer.setContentType(mId, contentType);
     return static_cast<Error>(intError);
 }

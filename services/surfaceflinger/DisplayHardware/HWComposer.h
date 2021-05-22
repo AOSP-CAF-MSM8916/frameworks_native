@@ -18,7 +18,6 @@
 #define ANDROID_SF_HWCOMPOSER_H
 
 #include <cstdint>
-#include <future>
 #include <memory>
 #include <mutex>
 #include <optional>
@@ -164,7 +163,7 @@ public:
                                                DisplayedFrameStats* outStats) = 0;
 
     // Sets the brightness of a display.
-    virtual std::future<status_t> setDisplayBrightness(DisplayId displayId, float brightness) = 0;
+    virtual status_t setDisplayBrightness(DisplayId displayId, float brightness) = 0;
 
     // Events handling ---------------------------------------------------------
 
@@ -304,7 +303,7 @@ public:
                                               uint8_t componentMask, uint64_t maxFrames) override;
     status_t getDisplayedContentSample(DisplayId displayId, uint64_t maxFrames, uint64_t timestamp,
                                        DisplayedFrameStats* outStats) override;
-    std::future<status_t> setDisplayBrightness(DisplayId displayId, float brightness) override;
+    status_t setDisplayBrightness(DisplayId displayId, float brightness) override;
 
     // Events handling ---------------------------------------------------------
 
