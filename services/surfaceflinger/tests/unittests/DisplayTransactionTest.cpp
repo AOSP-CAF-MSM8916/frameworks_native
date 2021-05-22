@@ -89,7 +89,7 @@ constexpr int32_t DEFAULT_REFRESH_RATE = 16'666'667;
 constexpr int32_t DEFAULT_DPI = 320;
 constexpr int DEFAULT_VIRTUAL_DISPLAY_SURFACE_FORMAT = HAL_PIXEL_FORMAT_RGB_565;
 
-constexpr int POWER_MODE_LEET = 1337; // An out of range power mode value
+constexpr int HWC_POWER_MODE_LEET = 1337; // An out of range power mode value
 
 /* ------------------------------------------------------------------------
  * Boolean avoidance
@@ -350,8 +350,8 @@ struct DisplayIdGetter<PhysicalDisplayId<PhysicalDisplay>> {
     static std::optional<DisplayId> get() {
         if (!PhysicalDisplay::HAS_IDENTIFICATION_DATA) {
             return getFallbackDisplayId(static_cast<bool>(PhysicalDisplay::PRIMARY)
-                                                ? LEGACY_DISPLAY_TYPE_PRIMARY
-                                                : LEGACY_DISPLAY_TYPE_EXTERNAL);
+                                                ? HWC_DISPLAY_PRIMARY
+                                                : HWC_DISPLAY_EXTERNAL);
         }
 
         const auto info =
@@ -515,7 +515,7 @@ struct HwcDisplayVariant {
 
     // The HWC active configuration id
     static constexpr int HWC_ACTIVE_CONFIG_ID = 2001;
-    static constexpr PowerMode INIT_POWER_MODE = PowerMode::ON;
+    static constexpr int INIT_POWER_MODE = HWC_POWER_MODE_NORMAL;
 
     static void injectPendingHotplugEvent(DisplayTransactionTest* test, Connection connection) {
         test->mFlinger.mutablePendingHotplugEvents().emplace_back(
@@ -541,7 +541,8 @@ struct HwcDisplayVariant {
         EXPECT_CALL(*test->mComposer, getDisplayCapabilities(HWC_DISPLAY_ID, _))
                 .WillOnce(DoAll(SetArgPointee<1>(std::vector<DisplayCapability>({})),
                                 Return(Error::NONE)));
-        EXPECT_CALL(*test->mComposer, setPowerMode(HWC_DISPLAY_ID, INIT_POWER_MODE))
+        EXPECT_CALL(*test->mComposer,
+                    setPowerMode(HWC_DISPLAY_ID, static_cast<PowerMode>(INIT_POWER_MODE)))
                 .WillOnce(Return(Error::NONE));
         injectHwcDisplayWithNoDefaultCapabilities(test);
     }
@@ -3053,10 +3054,10 @@ TEST_F(DisplayTransactionTest, onInitializeDisplaysSetsUpPrimaryDisplay) {
     EXPECT_EQ(0u, primaryDisplayState.width);
     EXPECT_EQ(0u, primaryDisplayState.height);
 
-    // The display should be set to PowerMode::ON
+    // The display should be set to HWC_POWER_MODE_NORMAL
     ASSERT_TRUE(hasDisplayDevice(primaryDisplay.token()));
     auto displayDevice = primaryDisplay.mutableDisplayDevice();
-    EXPECT_EQ(PowerMode::ON, displayDevice->getPowerMode());
+    EXPECT_EQ(HWC_POWER_MODE_NORMAL, displayDevice->getPowerMode());
 
     // The display refresh period should be set in the frame tracker.
     FrameStats stats;
@@ -3179,7 +3180,7 @@ struct DispSyncNotSupportedVariant {
 // selected subset which provides complete test coverage of the implementation.
 // --------------------------------------------------------------------
 
-template <PowerMode initialPowerMode, PowerMode targetPowerMode>
+template <int initialPowerMode, int targetPowerMode>
 struct TransitionVariantCommon {
     static constexpr auto INITIAL_POWER_MODE = initialPowerMode;
     static constexpr auto TARGET_POWER_MODE = targetPowerMode;
@@ -3187,7 +3188,8 @@ struct TransitionVariantCommon {
     static void verifyPostconditions(DisplayTransactionTest*) {}
 };
 
-struct TransitionOffToOnVariant : public TransitionVariantCommon<PowerMode::OFF, PowerMode::ON> {
+struct TransitionOffToOnVariant
+      : public TransitionVariantCommon<HWC_POWER_MODE_OFF, HWC_POWER_MODE_NORMAL> {
     template <typename Case>
     static void setupCallExpectations(DisplayTransactionTest* test) {
         Case::setupComposerCallExpectations(test, IComposerClient::PowerMode::ON);
@@ -3203,7 +3205,7 @@ struct TransitionOffToOnVariant : public TransitionVariantCommon<PowerMode::OFF,
 };
 
 struct TransitionOffToDozeSuspendVariant
-      : public TransitionVariantCommon<PowerMode::OFF, PowerMode::DOZE_SUSPEND> {
+      : public TransitionVariantCommon<HWC_POWER_MODE_OFF, HWC_POWER_MODE_DOZE_SUSPEND> {
     template <typename Case>
     static void setupCallExpectations(DisplayTransactionTest* test) {
         Case::setupComposerCallExpectations(test, Case::Doze::ACTUAL_POWER_MODE_FOR_DOZE_SUSPEND);
@@ -3217,7 +3219,8 @@ struct TransitionOffToDozeSuspendVariant
     }
 };
 
-struct TransitionOnToOffVariant : public TransitionVariantCommon<PowerMode::ON, PowerMode::OFF> {
+struct TransitionOnToOffVariant
+      : public TransitionVariantCommon<HWC_POWER_MODE_NORMAL, HWC_POWER_MODE_OFF> {
     template <typename Case>
     static void setupCallExpectations(DisplayTransactionTest* test) {
         Case::EventThread::setupReleaseAndDisableVsyncCallExpectations(test);
@@ -3231,7 +3234,7 @@ struct TransitionOnToOffVariant : public TransitionVariantCommon<PowerMode::ON, 
 };
 
 struct TransitionDozeSuspendToOffVariant
-      : public TransitionVariantCommon<PowerMode::DOZE_SUSPEND, PowerMode::OFF> {
+      : public TransitionVariantCommon<HWC_POWER_MODE_DOZE_SUSPEND, HWC_POWER_MODE_OFF> {
     template <typename Case>
     static void setupCallExpectations(DisplayTransactionTest* test) {
         Case::EventThread::setupEventAndEventControlThreadNoCallExpectations(test);
@@ -3243,7 +3246,8 @@ struct TransitionDozeSuspendToOffVariant
     }
 };
 
-struct TransitionOnToDozeVariant : public TransitionVariantCommon<PowerMode::ON, PowerMode::DOZE> {
+struct TransitionOnToDozeVariant
+      : public TransitionVariantCommon<HWC_POWER_MODE_NORMAL, HWC_POWER_MODE_DOZE> {
     template <typename Case>
     static void setupCallExpectations(DisplayTransactionTest* test) {
         Case::EventThread::setupEventAndEventControlThreadNoCallExpectations(test);
@@ -3252,7 +3256,7 @@ struct TransitionOnToDozeVariant : public TransitionVariantCommon<PowerMode::ON,
 };
 
 struct TransitionDozeSuspendToDozeVariant
-      : public TransitionVariantCommon<PowerMode::DOZE_SUSPEND, PowerMode::DOZE> {
+      : public TransitionVariantCommon<HWC_POWER_MODE_DOZE_SUSPEND, HWC_POWER_MODE_DOZE> {
     template <typename Case>
     static void setupCallExpectations(DisplayTransactionTest* test) {
         Case::EventThread::setupAcquireAndEnableVsyncCallExpectations(test);
@@ -3261,7 +3265,8 @@ struct TransitionDozeSuspendToDozeVariant
     }
 };
 
-struct TransitionDozeToOnVariant : public TransitionVariantCommon<PowerMode::DOZE, PowerMode::ON> {
+struct TransitionDozeToOnVariant
+      : public TransitionVariantCommon<HWC_POWER_MODE_DOZE, HWC_POWER_MODE_NORMAL> {
     template <typename Case>
     static void setupCallExpectations(DisplayTransactionTest* test) {
         Case::EventThread::setupEventAndEventControlThreadNoCallExpectations(test);
@@ -3270,7 +3275,7 @@ struct TransitionDozeToOnVariant : public TransitionVariantCommon<PowerMode::DOZ
 };
 
 struct TransitionDozeSuspendToOnVariant
-      : public TransitionVariantCommon<PowerMode::DOZE_SUSPEND, PowerMode::ON> {
+      : public TransitionVariantCommon<HWC_POWER_MODE_DOZE_SUSPEND, HWC_POWER_MODE_NORMAL> {
     template <typename Case>
     static void setupCallExpectations(DisplayTransactionTest* test) {
         Case::EventThread::setupAcquireAndEnableVsyncCallExpectations(test);
@@ -3280,7 +3285,7 @@ struct TransitionDozeSuspendToOnVariant
 };
 
 struct TransitionOnToDozeSuspendVariant
-      : public TransitionVariantCommon<PowerMode::ON, PowerMode::DOZE_SUSPEND> {
+      : public TransitionVariantCommon<HWC_POWER_MODE_NORMAL, HWC_POWER_MODE_DOZE_SUSPEND> {
     template <typename Case>
     static void setupCallExpectations(DisplayTransactionTest* test) {
         Case::EventThread::setupReleaseAndDisableVsyncCallExpectations(test);
@@ -3290,7 +3295,7 @@ struct TransitionOnToDozeSuspendVariant
 };
 
 struct TransitionOnToUnknownVariant
-      : public TransitionVariantCommon<PowerMode::ON, static_cast<PowerMode>(POWER_MODE_LEET)> {
+      : public TransitionVariantCommon<HWC_POWER_MODE_NORMAL, HWC_POWER_MODE_LEET> {
     template <typename Case>
     static void setupCallExpectations(DisplayTransactionTest* test) {
         Case::EventThread::setupEventAndEventControlThreadNoCallExpectations(test);
@@ -3315,7 +3320,7 @@ struct DisplayPowerCase {
     using DispSync = DispSyncVariant;
     using Transition = TransitionVariant;
 
-    static auto injectDisplayWithInitialPowerMode(DisplayTransactionTest* test, PowerMode mode) {
+    static auto injectDisplayWithInitialPowerMode(DisplayTransactionTest* test, int mode) {
         Display::injectHwcDisplayWithNoDefaultCapabilities(test);
         auto display = Display::makeFakeExistingDisplayInjector(test);
         display.inject();
@@ -3331,14 +3336,13 @@ struct DisplayPowerCase {
         EXPECT_CALL(*test->mMessageQueue, invalidate()).Times(1);
     }
 
-    static void setupSurfaceInterceptorCallExpectations(DisplayTransactionTest* test,
-                                                        PowerMode mode) {
+    static void setupSurfaceInterceptorCallExpectations(DisplayTransactionTest* test, int mode) {
         EXPECT_CALL(*test->mSurfaceInterceptor, isEnabled()).WillOnce(Return(true));
-        EXPECT_CALL(*test->mSurfaceInterceptor, savePowerModeUpdate(_, static_cast<int32_t>(mode)))
-                .Times(1);
+        EXPECT_CALL(*test->mSurfaceInterceptor, savePowerModeUpdate(_, mode)).Times(1);
     }
 
-    static void setupComposerCallExpectations(DisplayTransactionTest* test, PowerMode mode) {
+    static void setupComposerCallExpectations(DisplayTransactionTest* test,
+                                              IComposerClient::PowerMode mode) {
         // Any calls to get the active config will return a default value.
         EXPECT_CALL(*test->mComposer, getActiveConfig(Display::HWC_DISPLAY_ID, _))
                 .WillRepeatedly(DoAll(SetArgPointee<1>(Display::HWC_ACTIVE_CONFIG_ID),
@@ -3380,14 +3384,14 @@ public:
     void transitionDisplayCommon();
 };
 
-template <PowerMode PowerMode>
+template <int PowerMode>
 struct PowerModeInitialVSyncEnabled : public std::false_type {};
 
 template <>
-struct PowerModeInitialVSyncEnabled<PowerMode::ON> : public std::true_type {};
+struct PowerModeInitialVSyncEnabled<HWC_POWER_MODE_NORMAL> : public std::true_type {};
 
 template <>
-struct PowerModeInitialVSyncEnabled<PowerMode::DOZE> : public std::true_type {};
+struct PowerModeInitialVSyncEnabled<HWC_POWER_MODE_DOZE> : public std::true_type {};
 
 template <typename Case>
 void SetPowerModeInternalTest::transitionDisplayCommon() {
@@ -3430,18 +3434,18 @@ TEST_F(SetPowerModeInternalTest, setPowerModeInternalDoesNothingIfNoChange) {
     auto display = Case::Display::makeFakeExistingDisplayInjector(this);
     display.inject();
 
-    // The display is already set to PowerMode::ON
-    display.mutableDisplayDevice()->setPowerMode(PowerMode::ON);
+    // The display is already set to HWC_POWER_MODE_NORMAL
+    display.mutableDisplayDevice()->setPowerMode(HWC_POWER_MODE_NORMAL);
 
     // --------------------------------------------------------------------
     // Invocation
 
-    mFlinger.setPowerModeInternal(display.mutableDisplayDevice(), PowerMode::ON);
+    mFlinger.setPowerModeInternal(display.mutableDisplayDevice(), HWC_POWER_MODE_NORMAL);
 
     // --------------------------------------------------------------------
     // Postconditions
 
-    EXPECT_EQ(PowerMode::ON, display.mutableDisplayDevice()->getPowerMode());
+    EXPECT_EQ(HWC_POWER_MODE_NORMAL, display.mutableDisplayDevice()->getPowerMode());
 }
 
 TEST_F(SetPowerModeInternalTest, setPowerModeInternalDoesNothingIfVirtualDisplay) {
@@ -3460,18 +3464,18 @@ TEST_F(SetPowerModeInternalTest, setPowerModeInternalDoesNothingIfVirtualDisplay
     auto display = Case::Display::makeFakeExistingDisplayInjector(this);
     display.inject();
 
-    // The display is set to PowerMode::ON
-    getDisplayDevice(display.token())->setPowerMode(PowerMode::ON);
+    // The display is set to HWC_POWER_MODE_NORMAL
+    getDisplayDevice(display.token())->setPowerMode(HWC_POWER_MODE_NORMAL);
 
     // --------------------------------------------------------------------
     // Invocation
 
-    mFlinger.setPowerModeInternal(display.mutableDisplayDevice(), PowerMode::OFF);
+    mFlinger.setPowerModeInternal(display.mutableDisplayDevice(), HWC_POWER_MODE_OFF);
 
     // --------------------------------------------------------------------
     // Postconditions
 
-    EXPECT_EQ(PowerMode::ON, display.mutableDisplayDevice()->getPowerMode());
+    EXPECT_EQ(HWC_POWER_MODE_NORMAL, display.mutableDisplayDevice()->getPowerMode());
 }
 
 TEST_F(SetPowerModeInternalTest, transitionsDisplayFromOffToOnPrimaryDisplay) {

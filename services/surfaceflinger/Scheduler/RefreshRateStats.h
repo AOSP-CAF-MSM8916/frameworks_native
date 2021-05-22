@@ -41,15 +41,14 @@ class RefreshRateStats {
 
 public:
     RefreshRateStats(const RefreshRateConfigs& refreshRateConfigs, TimeStats& timeStats,
-                     HwcConfigIndexType currentConfigId,
-                     android::hardware::graphics::composer::hal::PowerMode currentPowerMode)
+                     HwcConfigIndexType currentConfigId, int currentPowerMode)
           : mRefreshRateConfigs(refreshRateConfigs),
             mTimeStats(timeStats),
             mCurrentConfigMode(currentConfigId),
             mCurrentPowerMode(currentPowerMode) {}
 
     // Sets power mode.
-    void setPowerMode(android::hardware::graphics::composer::hal::PowerMode mode) {
+    void setPowerMode(int mode) {
         if (mCurrentPowerMode == mode) {
             return;
         }
@@ -109,7 +108,7 @@ private:
         mPreviousRecordedTime = currentTime;
 
         uint32_t fps = 0;
-        if (mCurrentPowerMode == android::hardware::graphics::composer::hal::PowerMode::ON) {
+        if (mCurrentPowerMode == HWC_POWER_MODE_NORMAL) {
             // Normal power mode is counted under different config modes.
             if (mConfigModesTotalTime.find(mCurrentConfigMode) == mConfigModesTotalTime.end()) {
                 mConfigModesTotalTime[mCurrentConfigMode] = 0;
@@ -141,7 +140,7 @@ private:
     TimeStats& mTimeStats;
 
     HwcConfigIndexType mCurrentConfigMode;
-    android::hardware::graphics::composer::hal::PowerMode mCurrentPowerMode;
+    int32_t mCurrentPowerMode;
 
     std::unordered_map<HwcConfigIndexType /* configId */, int64_t /* duration in ms */>
             mConfigModesTotalTime;

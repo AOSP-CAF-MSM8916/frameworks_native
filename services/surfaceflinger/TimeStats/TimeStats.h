@@ -16,15 +16,7 @@
 
 #pragma once
 
-// TODO(b/129481165): remove the #pragma below and fix conversion issues
-#pragma clang diagnostic push
-#pragma clang diagnostic ignored "-Wconversion"
-
-#include <android/hardware/graphics/composer/2.4/IComposerClient.h>
-
-// TODO(b/129481165): remove the #pragma below and fix conversion issues
-#pragma clang diagnostic pop // ignored "-Wconversion"
-
+#include <hardware/hwcomposer_defs.h>
 #include <stats_event.h>
 #include <stats_pull_atom_callback.h>
 #include <statslog.h>
@@ -113,8 +105,7 @@ public:
     // If SF skips or rejects a buffer, remove the corresponding TimeRecord.
     virtual void removeTimeRecord(int32_t layerId, uint64_t frameNumber) = 0;
 
-    virtual void setPowerMode(
-            hardware::graphics::composer::V2_4::IComposerClient::PowerMode powerMode) = 0;
+    virtual void setPowerMode(int32_t powerMode) = 0;
     // Source of truth is RefrehRateStats.
     virtual void recordRefreshRate(uint32_t fps, nsecs_t duration) = 0;
     virtual void setPresentFenceGlobal(const std::shared_ptr<FenceTime>& presentFence) = 0;
@@ -123,8 +114,6 @@ public:
 namespace impl {
 
 class TimeStats : public android::TimeStats {
-    using PowerMode = android::hardware::graphics::composer::V2_4::IComposerClient::PowerMode;
-
     struct FrameTime {
         uint64_t frameNumber = 0;
         nsecs_t postTime = 0;
@@ -155,7 +144,7 @@ class TimeStats : public android::TimeStats {
     };
 
     struct PowerTime {
-        PowerMode powerMode = PowerMode::OFF;
+        int32_t powerMode = HWC_POWER_MODE_OFF;
         nsecs_t prevTime = 0;
     };
 
@@ -258,8 +247,7 @@ public:
     // If SF skips or rejects a buffer, remove the corresponding TimeRecord.
     void removeTimeRecord(int32_t layerId, uint64_t frameNumber) override;
 
-    void setPowerMode(
-            hardware::graphics::composer::V2_4::IComposerClient::PowerMode powerMode) override;
+    void setPowerMode(int32_t powerMode) override;
     // Source of truth is RefrehRateStats.
     void recordRefreshRate(uint32_t fps, nsecs_t duration) override;
     void setPresentFenceGlobal(const std::shared_ptr<FenceTime>& presentFence) override;

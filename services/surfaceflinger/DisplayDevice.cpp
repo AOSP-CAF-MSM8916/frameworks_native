@@ -43,8 +43,6 @@
 
 namespace android {
 
-namespace hal = hardware::graphics::composer::hal;
-
 using android::base::StringAppendF;
 
 ui::Transform::RotationFlags DisplayDevice::sPrimaryDisplayRotationFlags = ui::Transform::ROT_0;
@@ -121,17 +119,17 @@ uint32_t DisplayDevice::getPageFlipCount() const {
 }
 
 // ----------------------------------------------------------------------------
-void DisplayDevice::setPowerMode(hal::PowerMode mode) {
+void DisplayDevice::setPowerMode(int mode) {
     mPowerMode = mode;
-    getCompositionDisplay()->setCompositionEnabled(mPowerMode != hal::PowerMode::OFF);
+    getCompositionDisplay()->setCompositionEnabled(mPowerMode != HWC_POWER_MODE_OFF);
 }
 
-hal::PowerMode DisplayDevice::getPowerMode() const {
+int DisplayDevice::getPowerMode()  const {
     return mPowerMode;
 }
 
 bool DisplayDevice::isPoweredOn() const {
-    return mPowerMode != hal::PowerMode::OFF;
+    return mPowerMode != HWC_POWER_MODE_OFF;
 }
 
 void DisplayDevice::setActiveConfig(HwcConfigIndexType mode) {
@@ -266,8 +264,7 @@ void DisplayDevice::dump(std::string& result) const {
     StringAppendF(&result, "+ %s\n", getDebugName().c_str());
 
     result.append("   ");
-    StringAppendF(&result, "powerMode=%s (%d), ", to_string(mPowerMode).c_str(),
-                  static_cast<int32_t>(mPowerMode));
+    StringAppendF(&result, "powerMode=%d, ", mPowerMode);
     StringAppendF(&result, "activeConfig=%d, ", mActiveConfig.value());
     getCompositionDisplay()->dump(result);
 }
