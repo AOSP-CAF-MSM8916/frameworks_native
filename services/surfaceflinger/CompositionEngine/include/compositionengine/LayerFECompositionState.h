@@ -33,14 +33,12 @@
 #include <ui/GraphicBuffer.h>
 #include <ui/GraphicTypes.h>
 
-#include "DisplayHardware/Hal.h"
+#include "DisplayHardware/ComposerHal.h"
 
 // TODO(b/129481165): remove the #pragma below and fix conversion issues
 #pragma clang diagnostic pop // ignored "-Wconversion"
 
 namespace android::compositionengine {
-
-namespace hal = android::hardware::graphics::composer::hal;
 
 // More complex metadata for this layer
 struct GenericLayerMetadataEntry {
@@ -110,7 +108,7 @@ struct LayerFECompositionState {
     Region transparentRegionHint;
 
     // The blend mode for this layer
-    hal::BlendMode blendMode{hal::BlendMode::INVALID};
+    Hwc2::IComposerClient::BlendMode blendMode{Hwc2::IComposerClient::BlendMode::INVALID};
 
     // The bounds of the layer in layer local coordinates
     FloatRect geomLayerBounds;
@@ -137,7 +135,7 @@ struct LayerFECompositionState {
      */
 
     // The type of composition for this layer
-    hal::Composition compositionType{hal::Composition::INVALID};
+    Hwc2::IComposerClient::Composition compositionType{Hwc2::IComposerClient::Composition::INVALID};
 
     // The buffer and related state
     sp<GraphicBuffer> buffer;

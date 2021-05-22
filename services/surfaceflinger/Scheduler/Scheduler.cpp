@@ -669,7 +669,7 @@ std::optional<HwcConfigIndexType> Scheduler::getPreferredConfigId() {
     return mFeatures.configId;
 }
 
-void Scheduler::onNewVsyncPeriodChangeTimeline(const hal::VsyncPeriodChangeTimeline& timeline) {
+void Scheduler::onNewVsyncPeriodChangeTimeline(const HWC2::VsyncPeriodChangeTimeline& timeline) {
     if (timeline.refreshRequired) {
         mSchedulerCallback.repaintEverythingForHWC();
     }

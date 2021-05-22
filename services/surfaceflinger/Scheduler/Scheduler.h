@@ -153,7 +153,7 @@ public:
     std::optional<HwcConfigIndexType> getPreferredConfigId();
 
     // Notifies the scheduler about a refresh rate timeline change.
-    void onNewVsyncPeriodChangeTimeline(const hal::VsyncPeriodChangeTimeline& timeline);
+    void onNewVsyncPeriodChangeTimeline(const HWC2::VsyncPeriodChangeTimeline& timeline);
 
     // Notifies the scheduler when the display was refreshed
     void onDisplayRefreshed(nsecs_t timestamp);
@@ -271,7 +271,7 @@ private:
     const scheduler::RefreshRateConfigs& mRefreshRateConfigs;
 
     std::mutex mVsyncTimelineLock;
-    std::optional<hal::VsyncPeriodChangeTimeline> mLastVsyncPeriodChangeTimeline
+    std::optional<HWC2::VsyncPeriodChangeTimeline> mLastVsyncPeriodChangeTimeline
             GUARDED_BY(mVsyncTimelineLock);
     static constexpr std::chrono::nanoseconds MAX_VSYNC_APPLIED_TIME = 200ms;
 

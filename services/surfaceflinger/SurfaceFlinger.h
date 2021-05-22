@@ -33,6 +33,7 @@
 #include <gui/ITransactionCompletedListener.h>
 #include <gui/LayerState.h>
 #include <gui/OccupancyTracker.h>
+#include <hardware/hwcomposer_defs.h>
 #include <input/ISetInputWindowsListener.h>
 #include <layerproto/LayerProtoHeader.h>
 #include <math/mat4.h>
@@ -297,7 +298,8 @@ public:
     void setPrimaryVsyncEnabled(bool enabled);
 
     // main thread function to enable/disable h/w composer event
-    void setPrimaryVsyncEnabledInternal(bool enabled) REQUIRES(mStateLock);
+    void setPrimaryVsyncEnabledInternal(bool enabled);
+    void setVsyncEnabledInHWC(DisplayId displayId, HWC2::Vsync enabled);
 
     // called on the main thread by MessageQueue when an internal message
     // is received
@@ -513,15 +515,15 @@ private:
     /* ------------------------------------------------------------------------
      * HWC2::ComposerCallback / HWComposer::EventHandler interface
      */
-    void onVsyncReceived(int32_t sequenceId, hal::HWDisplayId hwcDisplayId, int64_t timestamp,
-                         std::optional<hal::VsyncPeriodNanos> vsyncPeriod) override;
-    void onHotplugReceived(int32_t sequenceId, hal::HWDisplayId hwcDisplayId,
-                           hal::Connection connection) override;
-    void onRefreshReceived(int32_t sequenceId, hal::HWDisplayId hwcDisplayId) override;
+    void onVsyncReceived(int32_t sequenceId, hwc2_display_t hwcDisplayId, int64_t timestamp,
+                         std::optional<hwc2_vsync_period_t> vsyncPeriod) override;
+    void onHotplugReceived(int32_t sequenceId, hwc2_display_t hwcDisplayId,
+                           HWC2::Connection connection) override;
+    void onRefreshReceived(int32_t sequenceId, hwc2_display_t hwcDisplayId) override;
     void onVsyncPeriodTimingChangedReceived(
-            int32_t sequenceId, hal::HWDisplayId display,
-            const hal::VsyncPeriodChangeTimeline& updatedTimeline) override;
-    void onSeamlessPossible(int32_t sequenceId, hal::HWDisplayId display) override;
+            int32_t sequenceId, hwc2_display_t display,
+            const hwc_vsync_period_change_timeline_t& updatedTimeline) override;
+    void onSeamlessPossible(int32_t sequenceId, hwc2_display_t display) override;
 
     /* ------------------------------------------------------------------------
      * ISchedulerCallback
@@ -1048,8 +1050,8 @@ private:
     BootStage mBootStage = BootStage::BOOTLOADER;
 
     struct HotplugEvent {
-        hal::HWDisplayId hwcDisplayId;
-        hal::Connection connection = hal::Connection::INVALID;
+        hwc2_display_t hwcDisplayId;
+        HWC2::Connection connection = HWC2::Connection::Invalid;
     };
     std::vector<HotplugEvent> mPendingHotplugEvents GUARDED_BY(mStateLock);
 
@@ -1269,6 +1271,10 @@ private:
     // The Layer pointer is removed from the set when the destructor is called so there shouldn't
     // be any issues with a raw pointer referencing an invalid object.
     std::unordered_set<Layer*> mOffscreenLayers;
+
+    // Flags to capture the state of Vsync in HWC
+    HWC2::Vsync mHWCVsyncState = HWC2::Vsync::Disable;
+    HWC2::Vsync mHWCVsyncPendingState = HWC2::Vsync::Disable;
 
     // Fields tracking the current jank event: when it started and how many
     // janky frames there are.

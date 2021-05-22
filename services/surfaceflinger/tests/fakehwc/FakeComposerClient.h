@@ -16,16 +16,24 @@
 
 #pragma once
 
-#include <chrono>
-
+#define HWC2_USE_CPP11
+#define HWC2_INCLUDE_STRINGIFICATION
 #include <composer-hal/2.1/ComposerClient.h>
 #include <composer-hal/2.2/ComposerClient.h>
 #include <composer-hal/2.3/ComposerClient.h>
 #include <composer-hal/2.4/ComposerClient.h>
-#include <utils/Condition.h>
+#undef HWC2_USE_CPP11
+#undef HWC2_INCLUDE_STRINGIFICATION
+#include "RenderState.h"
 
 #include "MockComposerHal.h"
-#include "RenderState.h"
+
+// Needed for display type/ID enums
+#include <hardware/hwcomposer_defs.h>
+
+#include <utils/Condition.h>
+
+#include <chrono>
 
 using namespace android::hardware::graphics::common;
 using namespace android::hardware::graphics::composer;

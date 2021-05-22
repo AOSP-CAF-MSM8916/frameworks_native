@@ -19,7 +19,11 @@
 #include "FakeComposerClient.h"
 
 #include <gui/SurfaceComposerClient.h>
+
+#include <hardware/hwcomposer_defs.h>
+
 #include <log/log.h>
+
 #include <gtest/gtest.h>
 
 // clang-format off

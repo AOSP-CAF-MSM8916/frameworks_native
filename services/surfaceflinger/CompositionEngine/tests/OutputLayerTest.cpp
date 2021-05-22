@@ -29,8 +29,6 @@
 namespace android::compositionengine {
 namespace {
 
-namespace hal = android::hardware::graphics::composer::hal;
-
 using testing::_;
 using testing::InSequence;
 using testing::Return;
@@ -669,7 +667,7 @@ TEST_F(OutputLayerUpdateCompositionStateTest, clientCompositionForcedFromArgumen
  */
 
 struct OutputLayerWriteStateToHWCTest : public OutputLayerTest {
-    static constexpr hal::Error kError = hal::Error::UNSUPPORTED;
+    static constexpr HWC2::Error kError = HWC2::Error::Unsupported;
     static constexpr FloatRect kSourceCrop{11.f, 12.f, 13.f, 14.f};
     static constexpr uint32_t kZOrder = 21u;
     static constexpr Hwc2::Transform kBufferTransform = static_cast<Hwc2::Transform>(31);
@@ -738,9 +736,11 @@ struct OutputLayerWriteStateToHWCTest : public OutputLayerTest {
         EXPECT_CALL(*mHwcLayer, setDisplayFrame(kDisplayFrame)).WillOnce(Return(kError));
         EXPECT_CALL(*mHwcLayer, setSourceCrop(kSourceCrop)).WillOnce(Return(kError));
         EXPECT_CALL(*mHwcLayer, setZOrder(kZOrder)).WillOnce(Return(kError));
-        EXPECT_CALL(*mHwcLayer, setTransform(kBufferTransform)).WillOnce(Return(kError));
+        EXPECT_CALL(*mHwcLayer, setTransform(static_cast<HWC2::Transform>(kBufferTransform)))
+                .WillOnce(Return(kError));
 
-        EXPECT_CALL(*mHwcLayer, setBlendMode(kBlendMode)).WillOnce(Return(kError));
+        EXPECT_CALL(*mHwcLayer, setBlendMode(static_cast<HWC2::BlendMode>(kBlendMode)))
+                .WillOnce(Return(kError));
         EXPECT_CALL(*mHwcLayer, setPlaneAlpha(kAlpha)).WillOnce(Return(kError));
     }
 
@@ -750,14 +750,15 @@ struct OutputLayerWriteStateToHWCTest : public OutputLayerTest {
         EXPECT_CALL(*mHwcLayer, setDataspace(kDataspace)).WillOnce(Return(kError));
         EXPECT_CALL(*mHwcLayer, setColorTransform(kColorTransform))
                 .WillOnce(Return(unsupported == SimulateUnsupported::ColorTransform
-                                         ? hal::Error::UNSUPPORTED
-                                         : hal::Error::NONE));
+                                         ? HWC2::Error::Unsupported
+                                         : HWC2::Error::None));
         EXPECT_CALL(*mHwcLayer, setSurfaceDamage(RegionEq(kSurfaceDamage)))
                 .WillOnce(Return(kError));
     }
 
     void expectSetCompositionTypeCall(Hwc2::IComposerClient::Composition compositionType) {
-        EXPECT_CALL(*mHwcLayer, setCompositionType(compositionType)).WillOnce(Return(kError));
+        EXPECT_CALL(*mHwcLayer, setCompositionType(static_cast<HWC2::Composition>(compositionType)))
+                .WillOnce(Return(kError));
     }
 
     void expectNoSetCompositionTypeCall() {
@@ -972,7 +973,7 @@ TEST_F(OutputLayerWriteStateToHWCTest, perFrameStateDoesNotIncludeMetadataIfPres
 
 struct OutputLayerWriteCursorPositionToHWCTest : public OutputLayerTest {
     static constexpr int kDefaultTransform = TR_IDENT;
-    static constexpr hal::Error kDefaultError = hal::Error::UNSUPPORTED;
+    static constexpr HWC2::Error kDefaultError = HWC2::Error::Unsupported;
 
     static const Rect kDefaultDisplayViewport;
     static const Rect kDefaultCursorFrame;

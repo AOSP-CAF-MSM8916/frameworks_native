@@ -50,8 +50,6 @@
 namespace android {
 namespace {
 
-namespace hal = android::hardware::graphics::composer::hal;
-
 using testing::_;
 using testing::AtLeast;
 using testing::Between;
@@ -75,8 +73,8 @@ using android::Hwc2::Transform;
 using FakeHwcDisplayInjector = TestableSurfaceFlinger::FakeHwcDisplayInjector;
 using FakeDisplayDeviceInjector = TestableSurfaceFlinger::FakeDisplayDeviceInjector;
 
-constexpr hal::HWDisplayId HWC_DISPLAY = FakeHwcDisplayInjector::DEFAULT_HWC_DISPLAY_ID;
-constexpr hal::HWLayerId HWC_LAYER = 5000;
+constexpr hwc2_display_t HWC_DISPLAY = FakeHwcDisplayInjector::DEFAULT_HWC_DISPLAY_ID;
+constexpr hwc2_layer_t HWC_LAYER = 5000;
 constexpr Transform DEFAULT_TRANSFORM = static_cast<Transform>(0);
 
 constexpr DisplayId DEFAULT_DISPLAY_ID = DisplayId{42};
@@ -172,7 +170,7 @@ public:
     template <typename Case>
     void captureScreenComposition();
 
-    std::unordered_set<hal::Capability> mDefaultCapabilities = {hal::Capability::SIDEBAND_STREAM};
+    std::unordered_set<HWC2::Capability> mDefaultCapabilities = {HWC2::Capability::SidebandStream};
 
     bool mDisplayOff = false;
     TestableSurfaceFlinger mFlinger;
@@ -275,7 +273,8 @@ struct BaseDisplayVariant {
                                          Derived::INIT_POWER_MODE)))
                 .WillOnce(Return(Error::NONE));
 
-        FakeHwcDisplayInjector(DEFAULT_DISPLAY_ID, hal::DisplayType::PHYSICAL, true /* isPrimary */)
+        FakeHwcDisplayInjector(DEFAULT_DISPLAY_ID, HWC2::DisplayType::Physical,
+                               true /* isPrimary */)
                 .setCapabilities(&test->mDefaultCapabilities)
                 .setPowerMode(Derived::INIT_POWER_MODE)
                 .inject(&test->mFlinger, test->mComposer);
@@ -989,7 +988,7 @@ struct NoCompositionTypeVariant {
 
 template <IComposerClient::Composition CompositionType>
 struct KeepCompositionTypeVariant {
-    static constexpr hal::Composition TYPE = CompositionType;
+    static constexpr HWC2::Composition TYPE = static_cast<HWC2::Composition>(CompositionType);
 
     static void setupHwcSetCallExpectations(CompositionTest* test) {
         if (!test->mDisplayOff) {
@@ -1007,7 +1006,7 @@ struct KeepCompositionTypeVariant {
 template <IComposerClient::Composition InitialCompositionType,
           IComposerClient::Composition FinalCompositionType>
 struct ChangeCompositionTypeVariant {
-    static constexpr hal::Composition TYPE = FinalCompositionType;
+    static constexpr HWC2::Composition TYPE = static_cast<HWC2::Composition>(FinalCompositionType);
 
     static void setupHwcSetCallExpectations(CompositionTest* test) {
         if (!test->mDisplayOff) {

@@ -16,6 +16,12 @@
 
 #pragma once
 
+#define HWC2_INCLUDE_STRINGIFICATION
+#define HWC2_USE_CPP11
+#include <hardware/hwcomposer2.h>
+#undef HWC2_INCLUDE_STRINGIFICATION
+#undef HWC2_USE_CPP11
+
 #include <atomic>
 #include <unordered_set>
 

@@ -155,8 +155,6 @@ using ui::DisplayPrimaries;
 using ui::Hdr;
 using ui::RenderIntent;
 
-namespace hal = android::hardware::graphics::composer::hal;
-
 namespace {
 
 #pragma clang diagnostic push
@@ -703,7 +701,7 @@ void SurfaceFlinger::init() {
     // Inform native graphics APIs whether the present timestamp is supported:
 
     const bool presentFenceReliable =
-            !getHwComposer().hasCapability(hal::Capability::PRESENT_FENCE_IS_NOT_RELIABLE);
+            !getHwComposer().hasCapability(HWC2::Capability::PresentFenceIsNotReliable);
     mStartPropertySetThread = getFactory().createStartPropertySetThread(presentFenceReliable);
 
     if (mStartPropertySetThread->Start() != NO_ERROR) {
@@ -781,7 +779,8 @@ status_t SurfaceFlinger::getSupportedFrameTimestamps(
     };
     ConditionalLock _l(mStateLock,
             std::this_thread::get_id() != mMainThreadId);
-    if (!getHwComposer().hasCapability(hal::Capability::PRESENT_FENCE_IS_NOT_RELIABLE)) {
+    if (!getHwComposer().hasCapability(
+            HWC2::Capability::PresentFenceIsNotReliable)) {
         outSupported->push_back(FrameEvent::DISPLAY_PRESENT);
     }
     return NO_ERROR;
@@ -1101,11 +1100,11 @@ void SurfaceFlinger::performSetActiveConfig() {
     ATRACE_INT("ActiveConfigFPS_HWC", refreshRate.getFps());
 
     // TODO(b/142753666) use constrains
-    hal::VsyncPeriodChangeConstraints constraints;
+    HWC2::VsyncPeriodChangeConstraints constraints;
     constraints.desiredTimeNanos = systemTime();
     constraints.seamlessRequired = false;
 
-    hal::VsyncPeriodChangeTimeline outTimeline;
+    HWC2::VsyncPeriodChangeTimeline outTimeline;
     auto status =
             getHwComposer().setActiveConfigWithConstraints(*displayId,
                                                            mUpcomingActiveConfig.configId.value(),
@@ -1221,9 +1220,8 @@ status_t SurfaceFlinger::getAutoLowLatencyModeSupport(const sp<IBinder>& display
     if (!displayId) {
         return NAME_NOT_FOUND;
     }
-    *outSupport =
-            getHwComposer().hasDisplayCapability(*displayId,
-                                                 hal::DisplayCapability::AUTO_LOW_LATENCY_MODE);
+    *outSupport = getHwComposer().hasDisplayCapability(*displayId,
+                                                       HWC2::DisplayCapability::AutoLowLatencyMode);
     return NO_ERROR;
 }
 
@@ -1250,18 +1248,18 @@ status_t SurfaceFlinger::getGameContentTypeSupport(const sp<IBinder>& displayTok
         return NAME_NOT_FOUND;
     }
 
-    std::vector<hal::ContentType> types;
+    std::vector<HWC2::ContentType> types;
     getHwComposer().getSupportedContentTypes(*displayId, &types);
 
     *outSupport = std::any_of(types.begin(), types.end(),
-                              [](auto type) { return type == hal::ContentType::GAME; });
+                              [](auto type) { return type == HWC2::ContentType::Game; });
     return NO_ERROR;
 }
 
 void SurfaceFlinger::setGameContentType(const sp<IBinder>& displayToken, bool on) {
     static_cast<void>(schedule([=]() MAIN_THREAD {
         if (const auto displayId = getPhysicalDisplayIdLocked(displayToken)) {
-            const auto type = on ? hal::ContentType::GAME : hal::ContentType::NONE;
+            const auto type = on ? HWC2::ContentType::Game : HWC2::ContentType::None;
             getHwComposer().setContentType(*displayId, type);
         } else {
             ALOGE("%s: Invalid display token %p", __FUNCTION__, displayToken.get());
@@ -1473,7 +1471,7 @@ status_t SurfaceFlinger::getDisplayBrightnessSupport(const sp<IBinder>& displayT
         return NAME_NOT_FOUND;
     }
     *outSupport =
-            getHwComposer().hasDisplayCapability(*displayId, hal::DisplayCapability::BRIGHTNESS);
+            getHwComposer().hasDisplayCapability(*displayId, HWC2::DisplayCapability::Brightness);
     return NO_ERROR;
 }
 
@@ -1539,9 +1537,9 @@ nsecs_t SurfaceFlinger::getVsyncPeriodFromHWC() const {
     return getHwComposer().getDisplayVsyncPeriod(*displayId);
 }
 
-void SurfaceFlinger::onVsyncReceived(int32_t sequenceId, hal::HWDisplayId hwcDisplayId,
+void SurfaceFlinger::onVsyncReceived(int32_t sequenceId, hwc2_display_t hwcDisplayId,
                                      int64_t timestamp,
-                                     std::optional<hal::VsyncPeriodNanos> vsyncPeriod) {
+                                     std::optional<hwc2_vsync_period_t> vsyncPeriod) {
     ATRACE_NAME("SF onVsync");
 
     Mutex::Autolock lock(mStateLock);
@@ -1593,10 +1591,10 @@ void SurfaceFlinger::changeRefreshRateLocked(const RefreshRate& refreshRate,
     setDesiredActiveConfig({refreshRate.getConfigId(), event});
 }
 
-void SurfaceFlinger::onHotplugReceived(int32_t sequenceId, hal::HWDisplayId hwcDisplayId,
-                                       hal::Connection connection) {
+void SurfaceFlinger::onHotplugReceived(int32_t sequenceId, hwc2_display_t hwcDisplayId,
+                                       HWC2::Connection connection) {
     ALOGV("%s(%d, %" PRIu64 ", %s)", __FUNCTION__, sequenceId, hwcDisplayId,
-          connection == hal::Connection::CONNECTED ? "connected" : "disconnected");
+          connection == HWC2::Connection::Connected ? "connected" : "disconnected");
 
     // Ignore events that do not have the right sequenceId.
     if (sequenceId != getBE().mComposerSequenceId) {
@@ -1620,8 +1618,8 @@ void SurfaceFlinger::onHotplugReceived(int32_t sequenceId, hal::HWDisplayId hwcD
 }
 
 void SurfaceFlinger::onVsyncPeriodTimingChangedReceived(
-        int32_t sequenceId, hal::HWDisplayId /*display*/,
-        const hal::VsyncPeriodChangeTimeline& updatedTimeline) {
+        int32_t sequenceId, hwc2_display_t /*display*/,
+        const hwc_vsync_period_change_timeline_t& updatedTimeline) {
     Mutex::Autolock lock(mStateLock);
     if (sequenceId != getBE().mComposerSequenceId) {
         return;
@@ -1629,12 +1627,12 @@ void SurfaceFlinger::onVsyncPeriodTimingChangedReceived(
     mScheduler->onNewVsyncPeriodChangeTimeline(updatedTimeline);
 }
 
-void SurfaceFlinger::onSeamlessPossible(int32_t /*sequenceId*/, hal::HWDisplayId /*display*/) {
+void SurfaceFlinger::onSeamlessPossible(int32_t /*sequenceId*/, hwc2_display_t /*display*/) {
     // TODO(b/142753666): use constraints when calling to setActiveConfigWithConstrains and
     // use this callback to know when to retry in case of SEAMLESS_NOT_POSSIBLE.
 }
 
-void SurfaceFlinger::onRefreshReceived(int sequenceId, hal::HWDisplayId /*hwcDisplayId*/) {
+void SurfaceFlinger::onRefreshReceived(int sequenceId, hwc2_display_t /*hwcDisplayId*/) {
     Mutex::Autolock lock(mStateLock);
     if (sequenceId != getBE().mComposerSequenceId) {
         return;
@@ -1653,7 +1651,7 @@ void SurfaceFlinger::setPrimaryVsyncEnabled(bool enabled) {
 void SurfaceFlinger::setPrimaryVsyncEnabledInternal(bool enabled) {
     ATRACE_CALL();
 
-    mHWCVsyncPendingState = enabled ? hal::Vsync::ENABLE : hal::Vsync::DISABLE;
+    mHWCVsyncPendingState = enabled ? HWC2::Vsync::Enable : HWC2::Vsync::Disable;
 
     if (const auto displayId = getInternalDisplayIdLocked()) {
         sp<DisplayDevice> display = getDefaultDisplayDeviceLocked();
@@ -2312,7 +2310,7 @@ void SurfaceFlinger::processDisplayHotplugEventsLocked() {
         const DisplayId displayId = info->id;
         const auto it = mPhysicalDisplayTokens.find(displayId);
 
-        if (event.connection == hal::Connection::CONNECTED) {
+        if (event.connection == HWC2::Connection::Connected) {
             if (it == mPhysicalDisplayTokens.end()) {
                 ALOGV("Creating display %s", to_string(displayId).c_str());
 
@@ -4076,7 +4074,15 @@ void SurfaceFlinger::onInitializeDisplays() {
 
 void SurfaceFlinger::initializeDisplays() {
     // Async since we may be called from the main thread.
-    static_cast<void>(schedule([this]() MAIN_THREAD { onInitializeDisplays(); }));
+    postMessageAsync(
+            new LambdaMessage([this]() NO_THREAD_SAFETY_ANALYSIS { onInitializeDisplays(); }));
+}
+
+void SurfaceFlinger::setVsyncEnabledInHWC(DisplayId displayId, HWC2::Vsync enabled) {
+    if (mHWCVsyncState != enabled) {
+        getHwComposer().setVsyncEnabled(displayId, enabled);
+        mHWCVsyncState = enabled;
+    }
 }
 
 void SurfaceFlinger::setPowerModeInternal(const sp<DisplayDevice>& display, int mode) {
@@ -4126,7 +4132,7 @@ void SurfaceFlinger::setPowerModeInternal(const sp<DisplayDevice>& display, int 
         }
 
         // Make sure HWVsync is disabled before turning off the display
-        getHwComposer().setVsyncEnabled(*displayId, hal::Vsync::DISABLE);
+        setVsyncEnabledInHWC(*displayId, HWC2::Vsync::Disable);
 
         getHwComposer().setPowerMode(*displayId, mode);
         mVisibleRegionsDirty = true;
@@ -4451,7 +4457,7 @@ void SurfaceFlinger::dumpDisplayIdentificationData(std::string& result) const {
 
 void SurfaceFlinger::dumpRawDisplayIdentificationData(const DumpArgs& args,
                                                       std::string& result) const {
-    hal::HWDisplayId hwcDisplayId;
+    hwc2_display_t hwcDisplayId;
     uint8_t port;
     DisplayIdentificationData data;
 
@@ -5839,11 +5845,11 @@ status_t SurfaceFlinger::setDesiredDisplayConfigSpecsInternal(
         const auto displayId = display->getId();
         LOG_ALWAYS_FATAL_IF(!displayId);
 
-        hal::VsyncPeriodChangeConstraints constraints;
+        HWC2::VsyncPeriodChangeConstraints constraints;
         constraints.desiredTimeNanos = systemTime();
         constraints.seamlessRequired = false;
 
-        hal::VsyncPeriodChangeTimeline timeline = {0, 0, 0};
+        HWC2::VsyncPeriodChangeTimeline timeline = {0, 0, 0};
         if (getHwComposer().setActiveConfigWithConstraints(*displayId,
                                                            policy->defaultConfig.value(),
                                                            constraints, &timeline) < 0) {

@@ -39,7 +39,6 @@
 #include <utils/Timers.h>
 
 #include "DisplayHardware/DisplayIdentification.h"
-#include "DisplayHardware/Hal.h"
 #include "DisplayHardware/PowerAdvisor.h"
 #include "RenderArea.h"
 #include "Scheduler/HwcStrongTypes.h"
@@ -188,7 +187,7 @@ struct DisplayDeviceState {
     struct Physical {
         DisplayId id;
         DisplayConnectionType type;
-        android::hardware::graphics::composer::hal::HWDisplayId hwcDisplayId;
+        hwc2_display_t hwcDisplayId;
 
         bool operator==(const Physical& other) const {
             return id == other.id && type == other.type && hwcDisplayId == other.hwcDisplayId;

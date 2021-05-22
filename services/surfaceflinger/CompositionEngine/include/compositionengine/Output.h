@@ -34,13 +34,11 @@
 
 #include "DisplayHardware/DisplayIdentification.h"
 
-namespace android {
-
 namespace HWC2 {
 class Layer;
 } // namespace HWC2
 
-namespace compositionengine {
+namespace android::compositionengine {
 
 class DisplayColorProfile;
 class LayerFE;
@@ -282,5 +280,4 @@ protected:
     virtual void cacheClientCompositionRequests(uint32_t cacheSize) = 0;
 };
 
-} // namespace compositionengine
-} // namespace android
+} // namespace android::compositionengine

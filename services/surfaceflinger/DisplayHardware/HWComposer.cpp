@@ -60,7 +60,7 @@
 
 #define RETURN_IF_HWC_ERROR_FOR(what, error, displayId, ...) \
     do {                                                     \
-        if (error != hal::Error::NONE) {                     \
+        if (error != HWC2::Error::None) {                    \
             LOG_HWC_ERROR(what, error, displayId);           \
             return __VA_ARGS__;                              \
         }                                                    \
@@ -69,34 +69,34 @@
 #define RETURN_IF_HWC_ERROR(error, displayId, ...) \
     RETURN_IF_HWC_ERROR_FOR(__FUNCTION__, error, displayId, __VA_ARGS__)
 
-namespace hal = android::hardware::graphics::composer::hal;
-
 namespace {
 
 using android::hardware::Return;
 using android::hardware::Void;
-using android::HWC2::ComposerCallback;
 
-class ComposerCallbackBridge : public hal::IComposerCallback {
+class ComposerCallbackBridge : public android::Hwc2::IComposerCallback {
 public:
-    ComposerCallbackBridge(ComposerCallback* callback, int32_t sequenceId,
+    ComposerCallbackBridge(HWC2::ComposerCallback* callback, int32_t sequenceId,
                            bool vsyncSwitchingSupported)
           : mCallback(callback),
             mSequenceId(sequenceId),
             mVsyncSwitchingSupported(vsyncSwitchingSupported) {}
 
-    android::hardware::Return<void> onHotplug(hal::HWDisplayId display,
-                                              hal::Connection conn) override {
-        mCallback->onHotplugReceived(mSequenceId, display, conn);
+    android::hardware::Return<void> onHotplug(
+            android::Hwc2::Display display,
+            android::Hwc2::IComposerCallback::Connection conn) override {
+        HWC2::Connection connection = static_cast<HWC2::Connection>(conn);
+        mCallback->onHotplugReceived(mSequenceId, display, connection);
         return android::hardware::Void();
     }
 
-    android::hardware::Return<void> onRefresh(hal::HWDisplayId display) override {
+    android::hardware::Return<void> onRefresh(android::Hwc2::Display display) override {
         mCallback->onRefreshReceived(mSequenceId, display);
         return android::hardware::Void();
     }
 
-    android::hardware::Return<void> onVsync(hal::HWDisplayId display, int64_t timestamp) override {
+    android::hardware::Return<void> onVsync(android::Hwc2::Display display,
+                                            int64_t timestamp) override {
         if (!mVsyncSwitchingSupported) {
             mCallback->onVsyncReceived(mSequenceId, display, timestamp, std::nullopt);
         } else {
@@ -105,8 +105,9 @@ public:
         return android::hardware::Void();
     }
 
-    android::hardware::Return<void> onVsync_2_4(hal::HWDisplayId display, int64_t timestamp,
-                                                hal::VsyncPeriodNanos vsyncPeriodNanos) override {
+    android::hardware::Return<void> onVsync_2_4(
+            android::Hwc2::Display display, int64_t timestamp,
+            android::Hwc2::VsyncPeriodNanos vsyncPeriodNanos) override {
         if (mVsyncSwitchingSupported) {
             mCallback->onVsyncReceived(mSequenceId, display, timestamp,
                                        std::make_optional(vsyncPeriodNanos));
@@ -117,19 +118,23 @@ public:
     }
 
     android::hardware::Return<void> onVsyncPeriodTimingChanged(
-            hal::HWDisplayId display,
-            const hal::VsyncPeriodChangeTimeline& updatedTimeline) override {
-        mCallback->onVsyncPeriodTimingChangedReceived(mSequenceId, display, updatedTimeline);
+            android::Hwc2::Display display,
+            const android::Hwc2::VsyncPeriodChangeTimeline& updatedTimeline) override {
+        hwc_vsync_period_change_timeline_t timeline;
+        timeline.newVsyncAppliedTimeNanos = updatedTimeline.newVsyncAppliedTimeNanos;
+        timeline.refreshRequired = updatedTimeline.refreshRequired;
+        timeline.refreshTimeNanos = updatedTimeline.refreshTimeNanos;
+        mCallback->onVsyncPeriodTimingChangedReceived(mSequenceId, display, timeline);
         return android::hardware::Void();
     }
 
-    android::hardware::Return<void> onSeamlessPossible(hal::HWDisplayId display) override {
+    android::hardware::Return<void> onSeamlessPossible(android::Hwc2::Display display) override {
         mCallback->onSeamlessPossible(mSequenceId, display);
         return android::hardware::Void();
     }
 
 private:
-    ComposerCallback* mCallback;
+    HWC2::ComposerCallback* mCallback;
     const int32_t mSequenceId;
     const bool mVsyncSwitchingSupported;
 };
@@ -168,12 +173,12 @@ void HWComposer::setConfiguration(HWC2::ComposerCallback* callback, int32_t sequ
     mComposer->registerCallback(callbackBridge);
 }
 
-bool HWComposer::getDisplayIdentificationData(hal::HWDisplayId hwcDisplayId, uint8_t* outPort,
+bool HWComposer::getDisplayIdentificationData(hwc2_display_t hwcDisplayId, uint8_t* outPort,
                                               DisplayIdentificationData* outData) const {
-    const auto error = static_cast<hal::Error>(
+    const auto error = static_cast<HWC2::Error>(
             mComposer->getDisplayIdentificationData(hwcDisplayId, outPort, outData));
-    if (error != hal::Error::NONE) {
-        if (error != hal::Error::UNSUPPORTED) {
+    if (error != HWC2::Error::None) {
+        if (error != HWC2::Error::Unsupported) {
             LOG_HWC_DISPLAY_ERROR(hwcDisplayId, to_string(error).c_str());
         }
         return false;
@@ -181,29 +186,29 @@ bool HWComposer::getDisplayIdentificationData(hal::HWDisplayId hwcDisplayId, uin
     return true;
 }
 
-bool HWComposer::hasCapability(hal::Capability capability) const {
+bool HWComposer::hasCapability(HWC2::Capability capability) const {
     return mCapabilities.count(capability) > 0;
 }
 
 bool HWComposer::hasDisplayCapability(DisplayId displayId,
-                                      hal::DisplayCapability capability) const {
+                                      HWC2::DisplayCapability capability) const {
     RETURN_IF_INVALID_DISPLAY(displayId, false);
     return mDisplayData.at(displayId).hwcDisplay->getCapabilities().count(capability) > 0;
 }
 
-std::optional<DisplayIdentificationInfo> HWComposer::onHotplug(hal::HWDisplayId hwcDisplayId,
-                                                               hal::Connection connection) {
+std::optional<DisplayIdentificationInfo> HWComposer::onHotplug(hwc2_display_t hwcDisplayId,
+                                                               HWC2::Connection connection) {
     switch (connection) {
-        case hal::Connection::CONNECTED:
+        case HWC2::Connection::Connected:
             return onHotplugConnect(hwcDisplayId);
-        case hal::Connection::DISCONNECTED:
+        case HWC2::Connection::Disconnected:
             return onHotplugDisconnect(hwcDisplayId);
-        case hal::Connection::INVALID:
+        case HWC2::Connection::Invalid:
             return {};
     }
 }
 
-bool HWComposer::onVsync(hal::HWDisplayId hwcDisplayId, int64_t timestamp) {
+bool HWComposer::onVsync(hwc2_display_t hwcDisplayId, int64_t timestamp) {
     const auto displayId = toPhysicalDisplayId(hwcDisplayId);
     if (!displayId) {
         LOG_HWC_DISPLAY_ERROR(hwcDisplayId, "Invalid HWC display");
@@ -255,16 +260,16 @@ std::optional<DisplayId> HWComposer::allocateVirtualDisplay(uint32_t width, uint
               height, SurfaceFlinger::maxVirtualDisplaySize);
         return {};
     }
-    hal::HWDisplayId hwcDisplayId = 0;
-    const auto error = static_cast<hal::Error>(
+    hwc2_display_t hwcDisplayId = 0;
+    const auto error = static_cast<HWC2::Error>(
             mComposer->createVirtualDisplay(width, height, format, &hwcDisplayId));
-    if (error != hal::Error::NONE) {
+    if (error != HWC2::Error::None) {
         ALOGE("%s: Failed to create HWC virtual display", __FUNCTION__);
         return {};
     }
 
     auto display = std::make_unique<HWC2::impl::Display>(*mComposer.get(), mCapabilities,
-                                                         hwcDisplayId, hal::DisplayType::VIRTUAL);
+                                                         hwcDisplayId, HWC2::DisplayType::Virtual);
     display->setConnected(true);
 
     DisplayId displayId;
@@ -283,7 +288,7 @@ std::optional<DisplayId> HWComposer::allocateVirtualDisplay(uint32_t width, uint
     return displayId;
 }
 
-void HWComposer::allocatePhysicalDisplay(hal::HWDisplayId hwcDisplayId, DisplayId displayId) {
+void HWComposer::allocatePhysicalDisplay(hwc2_display_t hwcDisplayId, DisplayId displayId) {
     if (!mInternalHwcDisplayId) {
         mInternalHwcDisplayId = hwcDisplayId;
     } else if (mInternalHwcDisplayId != hwcDisplayId && !mExternalHwcDisplayId) {
@@ -293,7 +298,7 @@ void HWComposer::allocatePhysicalDisplay(hal::HWDisplayId hwcDisplayId, DisplayI
     auto& displayData = mDisplayData[displayId];
     auto newDisplay =
             std::make_unique<HWC2::impl::Display>(*mComposer.get(), mCapabilities, hwcDisplayId,
-                                                  hal::DisplayType::PHYSICAL);
+                                                  HWC2::DisplayType::Physical);
     newDisplay->setConnected(true);
     displayData.hwcDisplay = std::move(newDisplay);
     mPhysicalDisplayIdMap[hwcDisplayId] = displayId;
@@ -352,7 +357,7 @@ std::shared_ptr<const HWC2::Display::Config> HWComposer::getActiveConfig(
 
     std::shared_ptr<const HWC2::Display::Config> config;
     auto error = mDisplayData.at(displayId).hwcDisplay->getActiveConfig(&config);
-    if (error == hal::Error::BAD_CONFIG) {
+    if (error == HWC2::Error::BadConfig) {
         LOG_DISPLAY_ERROR(displayId, "No active config");
         return nullptr;
     }
@@ -403,7 +408,7 @@ int HWComposer::getActiveConfigIndex(DisplayId displayId) const {
 
     int index;
     auto error = mDisplayData.at(displayId).hwcDisplay->getActiveConfigIndex(&index);
-    if (error == hal::Error::BAD_CONFIG) {
+    if (error == HWC2::Error::BadConfig) {
         LOG_DISPLAY_ERROR(displayId, "No active config");
         return -1;
     }
@@ -441,7 +446,7 @@ status_t HWComposer::setActiveColorMode(DisplayId displayId, ui::ColorMode mode,
     return NO_ERROR;
 }
 
-void HWComposer::setVsyncEnabled(DisplayId displayId, hal::Vsync enabled) {
+void HWComposer::setVsyncEnabled(DisplayId displayId, HWC2::Vsync enabled) {
     RETURN_IF_INVALID_DISPLAY(displayId);
     auto& displayData = mDisplayData[displayId];
 
@@ -466,7 +471,7 @@ void HWComposer::setVsyncEnabled(DisplayId displayId, hal::Vsync enabled) {
     displayData.vsyncEnabled = enabled;
 
     const auto tag = "HW_VSYNC_ON_" + to_string(displayId);
-    ATRACE_INT(tag.c_str(), enabled == hal::Vsync::ENABLE ? 1 : 0);
+    ATRACE_INT(tag.c_str(), enabled == HWC2::Vsync::Enable ? 1 : 0);
 }
 
 status_t HWComposer::setClientTarget(DisplayId displayId, uint32_t slot,
@@ -497,7 +502,7 @@ status_t HWComposer::getDeviceCompositionChanges(
     uint32_t numTypes = 0;
     uint32_t numRequests = 0;
 
-    hal::Error error = hal::Error::NONE;
+    HWC2::Error error = HWC2::Error::None;
 
     // First try to skip validate altogether when there is no client
     // composition.  When there is client composition, since we haven't
@@ -508,7 +513,7 @@ status_t HWComposer::getDeviceCompositionChanges(
         sp<Fence> outPresentFence;
         uint32_t state = UINT32_MAX;
         error = hwcDisplay->presentOrValidate(&numTypes, &numRequests, &outPresentFence , &state);
-        if (!hasChangesError(error)) {
+        if (error != HWC2::Error::HasChanges) {
             RETURN_IF_HWC_ERROR_FOR("presentOrValidate", error, displayId, UNKNOWN_ERROR);
         }
         if (state == 1) { //Present Succeeded.
@@ -525,7 +530,7 @@ status_t HWComposer::getDeviceCompositionChanges(
         error = hwcDisplay->validate(&numTypes, &numRequests);
     }
     ALOGV("SkipValidate failed, Falling back to SLOW validate/present");
-    if (!hasChangesError(error)) {
+    if (error != HWC2::Error::HasChanges) {
         RETURN_IF_HWC_ERROR_FOR("validate", error, displayId, BAD_INDEX);
     }
 
@@ -534,7 +539,7 @@ status_t HWComposer::getDeviceCompositionChanges(
     error = hwcDisplay->getChangedCompositionTypes(&changedTypes);
     RETURN_IF_HWC_ERROR_FOR("getChangedCompositionTypes", error, displayId, BAD_INDEX);
 
-    auto displayRequests = static_cast<hal::DisplayRequest>(0);
+    auto displayRequests = static_cast<HWC2::DisplayRequest>(0);
     android::HWComposer::DeviceRequestedChanges::LayerRequests layerRequests;
     layerRequests.reserve(numRequests);
     error = hwcDisplay->getRequests(&displayRequests, &layerRequests);
@@ -575,7 +580,7 @@ status_t HWComposer::presentAndGetReleaseFences(DisplayId displayId) {
 
     if (displayData.validateWasSkipped) {
         // explicitly flush all pending commands
-        auto error = static_cast<hal::Error>(mComposer->executeCommands());
+        auto error = static_cast<HWC2::Error>(mComposer->executeCommands());
         RETURN_IF_HWC_ERROR_FOR("executeCommands", error, displayId, UNKNOWN_ERROR);
         RETURN_IF_HWC_ERROR_FOR("present", displayData.presentError, displayId, UNKNOWN_ERROR);
         return NO_ERROR;
@@ -602,42 +607,42 @@ status_t HWComposer::setPowerMode(DisplayId displayId, int32_t intMode) {
         return INVALID_OPERATION;
     }
 
-    auto mode = static_cast<hal::PowerMode>(intMode);
-    if (mode == hal::PowerMode::OFF) {
-        setVsyncEnabled(displayId, hal::Vsync::DISABLE);
+    auto mode = static_cast<HWC2::PowerMode>(intMode);
+    if (mode == HWC2::PowerMode::Off) {
+        setVsyncEnabled(displayId, HWC2::Vsync::Disable);
     }
 
     auto& hwcDisplay = displayData.hwcDisplay;
     switch (mode) {
-        case hal::PowerMode::OFF:
-        case hal::PowerMode::ON:
+        case HWC2::PowerMode::Off:
+        case HWC2::PowerMode::On:
             ALOGV("setPowerMode: Calling HWC %s", to_string(mode).c_str());
             {
                 auto error = hwcDisplay->setPowerMode(mode);
-                if (error != hal::Error::NONE) {
-                    LOG_HWC_ERROR(("setPowerMode(" + to_string(mode) + ")").c_str(), error,
-                                  displayId);
+                if (error != HWC2::Error::None) {
+                    LOG_HWC_ERROR(("setPowerMode(" + to_string(mode) + ")").c_str(),
+                                  error, displayId);
                 }
             }
             break;
-        case hal::PowerMode::DOZE:
-        case hal::PowerMode::DOZE_SUSPEND:
+        case HWC2::PowerMode::Doze:
+        case HWC2::PowerMode::DozeSuspend:
             ALOGV("setPowerMode: Calling HWC %s", to_string(mode).c_str());
             {
                 bool supportsDoze = false;
                 auto error = hwcDisplay->supportsDoze(&supportsDoze);
-                if (error != hal::Error::NONE) {
+                if (error != HWC2::Error::None) {
                     LOG_HWC_ERROR("supportsDoze", error, displayId);
                 }
 
                 if (!supportsDoze) {
-                    mode = hal::PowerMode::ON;
+                    mode = HWC2::PowerMode::On;
                 }
 
                 error = hwcDisplay->setPowerMode(mode);
-                if (error != hal::Error::NONE) {
-                    LOG_HWC_ERROR(("setPowerMode(" + to_string(mode) + ")").c_str(), error,
-                                  displayId);
+                if (error != HWC2::Error::None) {
+                    LOG_HWC_ERROR(("setPowerMode(" + to_string(mode) + ")").c_str(),
+                                  error, displayId);
                 }
             }
             break;
@@ -650,8 +655,8 @@ status_t HWComposer::setPowerMode(DisplayId displayId, int32_t intMode) {
 }
 
 status_t HWComposer::setActiveConfigWithConstraints(
-        DisplayId displayId, size_t configId, const hal::VsyncPeriodChangeConstraints& constraints,
-        hal::VsyncPeriodChangeTimeline* outTimeline) {
+        DisplayId displayId, size_t configId, const HWC2::VsyncPeriodChangeConstraints& constraints,
+        HWC2::VsyncPeriodChangeTimeline* outTimeline) {
     RETURN_IF_INVALID_DISPLAY(displayId, BAD_INDEX);
 
     auto& displayData = mDisplayData[displayId];
@@ -672,10 +677,9 @@ status_t HWComposer::setColorTransform(DisplayId displayId, const mat4& transfor
 
     auto& displayData = mDisplayData[displayId];
     bool isIdentity = transform == mat4();
-    auto error = displayData.hwcDisplay
-                         ->setColorTransform(transform,
-                                             isIdentity ? hal::ColorTransform::IDENTITY
-                                                        : hal::ColorTransform::ARBITRARY_MATRIX);
+    auto error = displayData.hwcDisplay->setColorTransform(transform,
+            isIdentity ? HAL_COLOR_TRANSFORM_IDENTITY :
+            HAL_COLOR_TRANSFORM_ARBITRARY_MATRIX);
     RETURN_IF_HWC_ERROR(error, displayId, UNKNOWN_ERROR);
     return NO_ERROR;
 }
@@ -766,7 +770,7 @@ status_t HWComposer::getDisplayedContentSamplingAttributes(DisplayId displayId,
             mDisplayData[displayId]
                     .hwcDisplay->getDisplayedContentSamplingAttributes(outFormat, outDataspace,
                                                                        outComponentMask);
-    if (error == hal::Error::UNSUPPORTED) RETURN_IF_HWC_ERROR(error, displayId, INVALID_OPERATION);
+    if (error == HWC2::Error::Unsupported) RETURN_IF_HWC_ERROR(error, displayId, INVALID_OPERATION);
     RETURN_IF_HWC_ERROR(error, displayId, UNKNOWN_ERROR);
     return NO_ERROR;
 }
@@ -779,8 +783,8 @@ status_t HWComposer::setDisplayContentSamplingEnabled(DisplayId displayId, bool 
                                                                                  componentMask,
                                                                                  maxFrames);
 
-    if (error == hal::Error::UNSUPPORTED) RETURN_IF_HWC_ERROR(error, displayId, INVALID_OPERATION);
-    if (error == hal::Error::BAD_PARAMETER) RETURN_IF_HWC_ERROR(error, displayId, BAD_VALUE);
+    if (error == HWC2::Error::Unsupported) RETURN_IF_HWC_ERROR(error, displayId, INVALID_OPERATION);
+    if (error == HWC2::Error::BadParameter) RETURN_IF_HWC_ERROR(error, displayId, BAD_VALUE);
     RETURN_IF_HWC_ERROR(error, displayId, UNKNOWN_ERROR);
     return NO_ERROR;
 }
@@ -798,10 +802,10 @@ status_t HWComposer::getDisplayedContentSample(DisplayId displayId, uint64_t max
 status_t HWComposer::setDisplayBrightness(DisplayId displayId, float brightness) {
     RETURN_IF_INVALID_DISPLAY(displayId, BAD_INDEX);
     const auto error = mDisplayData[displayId].hwcDisplay->setDisplayBrightness(brightness);
-    if (error == hal::Error::UNSUPPORTED) {
+    if (error == HWC2::Error::Unsupported) {
         RETURN_IF_HWC_ERROR(error, displayId, INVALID_OPERATION);
     }
-    if (error == hal::Error::BAD_PARAMETER) {
+    if (error == HWC2::Error::BadParameter) {
         RETURN_IF_HWC_ERROR(error, displayId, BAD_VALUE);
     }
     RETURN_IF_HWC_ERROR(error, displayId, UNKNOWN_ERROR);
@@ -811,10 +815,10 @@ status_t HWComposer::setDisplayBrightness(DisplayId displayId, float brightness)
 status_t HWComposer::setAutoLowLatencyMode(DisplayId displayId, bool on) {
     RETURN_IF_INVALID_DISPLAY(displayId, BAD_INDEX);
     const auto error = mDisplayData[displayId].hwcDisplay->setAutoLowLatencyMode(on);
-    if (error == hal::Error::UNSUPPORTED) {
+    if (error == HWC2::Error::Unsupported) {
         RETURN_IF_HWC_ERROR(error, displayId, INVALID_OPERATION);
     }
-    if (error == hal::Error::BAD_PARAMETER) {
+    if (error == HWC2::Error::BadParameter) {
         RETURN_IF_HWC_ERROR(error, displayId, BAD_VALUE);
     }
     RETURN_IF_HWC_ERROR(error, displayId, UNKNOWN_ERROR);
@@ -822,7 +826,7 @@ status_t HWComposer::setAutoLowLatencyMode(DisplayId displayId, bool on) {
 }
 
 status_t HWComposer::getSupportedContentTypes(
-        DisplayId displayId, std::vector<hal::ContentType>* outSupportedContentTypes) {
+        DisplayId displayId, std::vector<HWC2::ContentType>* outSupportedContentTypes) {
     RETURN_IF_INVALID_DISPLAY(displayId, BAD_INDEX);
     const auto error =
             mDisplayData[displayId].hwcDisplay->getSupportedContentTypes(outSupportedContentTypes);
@@ -832,13 +836,13 @@ status_t HWComposer::getSupportedContentTypes(
     return NO_ERROR;
 }
 
-status_t HWComposer::setContentType(DisplayId displayId, hal::ContentType contentType) {
+status_t HWComposer::setContentType(DisplayId displayId, HWC2::ContentType contentType) {
     RETURN_IF_INVALID_DISPLAY(displayId, BAD_INDEX);
     const auto error = mDisplayData[displayId].hwcDisplay->setContentType(contentType);
-    if (error == hal::Error::UNSUPPORTED) {
+    if (error == HWC2::Error::Unsupported) {
         RETURN_IF_HWC_ERROR(error, displayId, INVALID_OPERATION);
     }
-    if (error == hal::Error::BAD_PARAMETER) {
+    if (error == HWC2::Error::BadParameter) {
         RETURN_IF_HWC_ERROR(error, displayId, BAD_VALUE);
     }
     RETURN_IF_HWC_ERROR(error, displayId, UNKNOWN_ERROR);
@@ -854,7 +858,7 @@ void HWComposer::dump(std::string& result) const {
     result.append(mComposer->dumpDebugInfo());
 }
 
-std::optional<DisplayId> HWComposer::toPhysicalDisplayId(hal::HWDisplayId hwcDisplayId) const {
+std::optional<DisplayId> HWComposer::toPhysicalDisplayId(hwc2_display_t hwcDisplayId) const {
     if (const auto it = mPhysicalDisplayIdMap.find(hwcDisplayId);
         it != mPhysicalDisplayIdMap.end()) {
         return it->second;
@@ -862,7 +866,7 @@ std::optional<DisplayId> HWComposer::toPhysicalDisplayId(hal::HWDisplayId hwcDis
     return {};
 }
 
-std::optional<hal::HWDisplayId> HWComposer::fromPhysicalDisplayId(DisplayId displayId) const {
+std::optional<hwc2_display_t> HWComposer::fromPhysicalDisplayId(DisplayId displayId) const {
     if (const auto it = mDisplayData.find(displayId);
         it != mDisplayData.end() && !it->second.isVirtual) {
         return it->second.hwcDisplay->getId();
@@ -870,7 +874,7 @@ std::optional<hal::HWDisplayId> HWComposer::fromPhysicalDisplayId(DisplayId disp
     return {};
 }
 
-bool HWComposer::shouldIgnoreHotplugConnect(hal::HWDisplayId hwcDisplayId,
+bool HWComposer::shouldIgnoreHotplugConnect(hwc2_display_t hwcDisplayId,
                                             bool hasDisplayIdentificationData) const {
     if (mHasMultiDisplaySupport && !hasDisplayIdentificationData) {
         ALOGE("Ignoring connection of display %" PRIu64 " without identification data",
@@ -886,8 +890,7 @@ bool HWComposer::shouldIgnoreHotplugConnect(hal::HWDisplayId hwcDisplayId,
     return false;
 }
 
-std::optional<DisplayIdentificationInfo> HWComposer::onHotplugConnect(
-        hal::HWDisplayId hwcDisplayId) {
+std::optional<DisplayIdentificationInfo> HWComposer::onHotplugConnect(hwc2_display_t hwcDisplayId) {
     std::optional<DisplayIdentificationInfo> info;
     if (const auto displayId = toPhysicalDisplayId(hwcDisplayId)) {
         info = DisplayIdentificationInfo{.id = *displayId,
@@ -935,7 +938,7 @@ std::optional<DisplayIdentificationInfo> HWComposer::onHotplugConnect(
 }
 
 std::optional<DisplayIdentificationInfo> HWComposer::onHotplugDisconnect(
-        hal::HWDisplayId hwcDisplayId) {
+        hwc2_display_t hwcDisplayId) {
     const auto displayId = toPhysicalDisplayId(hwcDisplayId);
     if (!displayId) {
         ALOGE("Ignoring disconnection of invalid HWC display %" PRIu64, hwcDisplayId);
@@ -957,10 +960,10 @@ std::optional<DisplayIdentificationInfo> HWComposer::onHotplugDisconnect(
 }
 
 void HWComposer::loadCapabilities() {
-    static_assert(sizeof(hal::Capability) == sizeof(int32_t), "Capability size has changed");
+    static_assert(sizeof(HWC2::Capability) == sizeof(int32_t), "Capability size has changed");
     auto capabilities = mComposer->getCapabilities();
     for (auto capability : capabilities) {
-        mCapabilities.emplace(static_cast<hal::Capability>(capability));
+        mCapabilities.emplace(static_cast<HWC2::Capability>(capability));
     }
 }
 

@@ -41,8 +41,6 @@
 namespace android::compositionengine {
 namespace {
 
-namespace hal = android::hardware::graphics::composer::hal;
-
 using testing::_;
 using testing::DoAll;
 using testing::Eq;
@@ -652,9 +650,9 @@ TEST_F(DisplayChooseCompositionStrategyTest, normalOperation) {
 
 TEST_F(DisplayChooseCompositionStrategyTest, normalOperationWithChanges) {
     android::HWComposer::DeviceRequestedChanges changes{
-            {{nullptr, hal::Composition::CLIENT}},
-            hal::DisplayRequest::FLIP_CLIENT_TARGET,
-            {{nullptr, hal::LayerRequest::CLEAR_CLIENT_TARGET}},
+            {{nullptr, HWC2::Composition::Client}},
+            HWC2::DisplayRequest::FlipClientTarget,
+            {{nullptr, HWC2::LayerRequest::ClearClientTarget}},
     };
 
     // Since two calls are made to anyLayersRequireClientComposition with different return
@@ -689,7 +687,7 @@ TEST_F(DisplayChooseCompositionStrategyTest, normalOperationWithChanges) {
 using DisplayGetSkipColorTransformTest = DisplayWithLayersTestCommon;
 
 TEST_F(DisplayGetSkipColorTransformTest, checksCapabilityIfNonHwcDisplay) {
-    EXPECT_CALL(mHwComposer, hasCapability(hal::Capability::SKIP_CLIENT_COLOR_TRANSFORM))
+    EXPECT_CALL(mHwComposer, hasCapability(HWC2::Capability::SkipClientColorTransform))
             .WillOnce(Return(true));
     auto args = getDisplayCreationArgsForNonHWCVirtualDisplay();
     auto nonHwcDisplay{impl::createDisplay(mCompositionEngine, args)};
@@ -699,7 +697,7 @@ TEST_F(DisplayGetSkipColorTransformTest, checksCapabilityIfNonHwcDisplay) {
 TEST_F(DisplayGetSkipColorTransformTest, checksDisplayCapability) {
     EXPECT_CALL(mHwComposer,
                 hasDisplayCapability(DEFAULT_DISPLAY_ID,
-                                     hal::DisplayCapability::SKIP_CLIENT_COLOR_TRANSFORM))
+                                     HWC2::DisplayCapability::SkipClientColorTransform))
             .WillOnce(Return(true));
     EXPECT_TRUE(mDisplay->getSkipColorTransform());
 }
@@ -765,9 +763,9 @@ TEST_F(DisplayApplyChangedTypesToLayersTest, appliesChanges) {
             .Times(1);
 
     mDisplay->applyChangedTypesToLayers(impl::Display::ChangedTypes{
-            {&mLayer1.hwc2Layer, hal::Composition::CLIENT},
-            {&mLayer2.hwc2Layer, hal::Composition::DEVICE},
-            {&hwc2LayerUnknown, hal::Composition::SOLID_COLOR},
+            {&mLayer1.hwc2Layer, HWC2::Composition::Client},
+            {&mLayer2.hwc2Layer, HWC2::Composition::Device},
+            {&hwc2LayerUnknown, HWC2::Composition::SolidColor},
     });
 }
 
@@ -778,28 +776,28 @@ TEST_F(DisplayApplyChangedTypesToLayersTest, appliesChanges) {
 using DisplayApplyDisplayRequestsTest = DisplayWithLayersTestCommon;
 
 TEST_F(DisplayApplyDisplayRequestsTest, handlesNoRequests) {
-    mDisplay->applyDisplayRequests(static_cast<hal::DisplayRequest>(0));
+    mDisplay->applyDisplayRequests(static_cast<HWC2::DisplayRequest>(0));
 
     auto& state = mDisplay->getState();
     EXPECT_FALSE(state.flipClientTarget);
 }
 
 TEST_F(DisplayApplyDisplayRequestsTest, handlesFlipClientTarget) {
-    mDisplay->applyDisplayRequests(hal::DisplayRequest::FLIP_CLIENT_TARGET);
+    mDisplay->applyDisplayRequests(HWC2::DisplayRequest::FlipClientTarget);
 
     auto& state = mDisplay->getState();
     EXPECT_TRUE(state.flipClientTarget);
 }
 
 TEST_F(DisplayApplyDisplayRequestsTest, handlesWriteClientTargetToOutput) {
-    mDisplay->applyDisplayRequests(hal::DisplayRequest::WRITE_CLIENT_TARGET_TO_OUTPUT);
+    mDisplay->applyDisplayRequests(HWC2::DisplayRequest::WriteClientTargetToOutput);
 
     auto& state = mDisplay->getState();
     EXPECT_FALSE(state.flipClientTarget);
 }
 
 TEST_F(DisplayApplyDisplayRequestsTest, handlesAllRequestFlagsSet) {
-    mDisplay->applyDisplayRequests(static_cast<hal::DisplayRequest>(~0));
+    mDisplay->applyDisplayRequests(static_cast<HWC2::DisplayRequest>(~0));
 
     auto& state = mDisplay->getState();
     EXPECT_TRUE(state.flipClientTarget);
@@ -829,8 +827,8 @@ TEST_F(DisplayApplyLayerRequestsToLayersTest, appliesDeviceLayerRequests) {
             .Times(1);
 
     mDisplay->applyLayerRequestsToLayers(impl::Display::LayerRequests{
-            {&mLayer1.hwc2Layer, hal::LayerRequest::CLEAR_CLIENT_TARGET},
-            {&hwc2LayerUnknown, hal::LayerRequest::CLEAR_CLIENT_TARGET},
+            {&mLayer1.hwc2Layer, HWC2::LayerRequest::ClearClientTarget},
+            {&hwc2LayerUnknown, HWC2::LayerRequest::ClearClientTarget},
     });
 }
 

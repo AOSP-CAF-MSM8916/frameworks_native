@@ -16,6 +16,8 @@
 
 #pragma once
 
+#include <hardware/hwcomposer2.h>
+
 #include <vector>
 
 namespace sftest {
