@@ -1204,11 +1204,6 @@ private:
     hal::Vsync mHWCVsyncPendingState = hal::Vsync::DISABLE;
 
     /* ------------------------------------------------------------------------
-     * Generic Layer Metadata
-     */
-    const std::unordered_map<std::string, uint32_t>& getGenericLayerMetadataKeyMap() const;
-
-    /* ------------------------------------------------------------------------
      * Misc
      */
 

@@ -40,29 +40,6 @@
 
 namespace android::compositionengine {
 
-// More complex metadata for this layer
-struct GenericLayerMetadataEntry {
-    // True if the metadata may affect the composed result.
-    // See setLayerGenericMetadata in IComposerClient.hal
-    bool mandatory;
-
-    // Byte blob or parcel
-    std::vector<uint8_t> value;
-
-    std::string dumpAsString() const;
-};
-
-inline bool operator==(const GenericLayerMetadataEntry& lhs, const GenericLayerMetadataEntry& rhs) {
-    return lhs.mandatory == rhs.mandatory && lhs.value == rhs.value;
-}
-
-// Defining PrintTo helps with Google Tests.
-inline void PrintTo(const GenericLayerMetadataEntry& v, ::std::ostream* os) {
-    *os << v.dumpAsString();
-}
-
-using GenericLayerMetadataMap = std::unordered_map<std::string, GenericLayerMetadataEntry>;
-
 /*
  * Used by LayerFE::getCompositionState
  */
@@ -128,7 +105,15 @@ struct LayerFECompositionState {
     Rect geomContentCrop;
     Rect geomCrop;
 
-    GenericLayerMetadataMap metadata;
+    /*
+     * Extra metadata
+     */
+
+    // The type for this layer
+    int type{0};
+
+    // The appId for this layer
+    int appId{0};
 
     /*
      * Per-frame content

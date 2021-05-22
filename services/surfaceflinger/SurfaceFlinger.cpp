@@ -6067,18 +6067,6 @@ status_t SurfaceFlinger::setGlobalShadowSettings(const half4& ambientColor, cons
     return NO_ERROR;
 }
 
-const std::unordered_map<std::string, uint32_t>& SurfaceFlinger::getGenericLayerMetadataKeyMap()
-        const {
-    // TODO(b/149500060): Remove this fixed/static mapping. Please prefer taking
-    // on the work to remove the table in that bug rather than adding more to
-    // it.
-    static const std::unordered_map<std::string, uint32_t> genericLayerMetadataKeyMap{
-            {"org.chromium.arc.V1_0.TaskId", METADATA_TASK_ID},
-            {"org.chromium.arc.V1_0.CursorInfo", METADATA_MOUSE_CURSOR},
-    };
-    return genericLayerMetadataKeyMap;
-}
-
 status_t SurfaceFlinger::setFrameRate(const sp<IGraphicBufferProducer>& surface, float frameRate,
                                       int8_t compatibility) {
     if (!ValidateFrameRate(frameRate, compatibility, "SurfaceFlinger::setFrameRate")) {

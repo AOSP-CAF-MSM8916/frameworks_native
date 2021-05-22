@@ -32,20 +32,6 @@ void dumpVal(std::string& out, const char* name, half4 value) {
 
 } // namespace
 
-std::string GenericLayerMetadataEntry::dumpAsString() const {
-    using android::base::StringAppendF;
-    std::string out;
-
-    out.append("GenericLayerMetadataEntry{mandatory: ");
-    StringAppendF(&out, "%d", mandatory);
-    out.append(" value: ");
-    for (uint8_t byte : value) {
-        StringAppendF(&out, "0x08%" PRIx8 " ", byte);
-    }
-    out.append("]}");
-    return out;
-}
-
 LayerFECompositionState::~LayerFECompositionState() = default;
 
 void LayerFECompositionState::dump(std::string& out) const {
@@ -75,16 +61,9 @@ void LayerFECompositionState::dump(std::string& out) const {
     dumpVal(out, "alpha", alpha);
     dumpVal(out, "backgroundBlurRadius", backgroundBlurRadius);
 
-    if (!metadata.empty()) {
-        out.append("\n      metadata {");
-        for (const auto& [key, entry] : metadata) {
-            out.append("\n           ");
-            out.append(key);
-            out.append("=");
-            out.append(entry.dumpAsString());
-        }
-        out.append("\n      }\n      ");
-    }
+    out.append("\n      ");
+    dumpVal(out, "type", type);
+    dumpVal(out, "appId", appId);
 
     dumpVal(out, "composition type", toString(compositionType), compositionType);
 
