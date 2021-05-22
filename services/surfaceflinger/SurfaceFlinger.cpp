@@ -53,7 +53,6 @@
 #include <gui/IDisplayEventConnection.h>
 #include <gui/IProducerListener.h>
 #include <gui/LayerDebugInfo.h>
-#include <gui/LayerMetadata.h>
 #include <gui/LayerState.h>
 #include <gui/Surface.h>
 #include <hidl/ServiceManagement.h>
@@ -678,7 +677,7 @@ void SurfaceFlinger::init() {
                 .build()));
     mCompositionEngine->setTimeStats(mTimeStats);
     mCompositionEngine->setHwComposer(getFactory().createHWComposer(getBE().mHwcServiceName));
-    mCompositionEngine->getHwComposer().setConfiguration(this, getBE().mComposerSequenceId);
+    mCompositionEngine->getHwComposer().registerCallback(this, getBE().mComposerSequenceId);
     // Process any initial hotplug and resulting display changes.
     processDisplayHotplugEventsLocked();
     const auto display = getDefaultDisplayDeviceLocked();
