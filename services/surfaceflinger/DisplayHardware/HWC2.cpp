@@ -208,13 +208,14 @@ Error Display::getDisplayVsyncPeriod(nsecs_t* outVsyncPeriod) const {
         error = static_cast<Error>(intError);
         *outVsyncPeriod = static_cast<nsecs_t>(vsyncPeriodNanos);
     } else {
-        // Get the default vsync period
-        hwc2_config_t configId = 0;
-        auto intError_2_1 = mComposer.getActiveConfig(mId, &configId);
-        error = static_cast<Error>(intError_2_1);
-        if (error == Error::None) {
-            auto config = mConfigs.at(configId);
-            *outVsyncPeriod = config->getVsyncPeriod();
+        std::shared_ptr<const Display::Config> config;
+        error = getActiveConfig(&config);
+        if (error != Error::None) {
+            return error;
+        }
+        if (!config) {
+            // HWC has updated the display modes and hasn't notified us yet.
+            return Error::BadConfig;
         }
 
         *outVsyncPeriod = config->getVsyncPeriod();
@@ -899,9 +900,6 @@ Error Layer::setPerFrameMetadata(const int32_t supportedPerFrameMetadata,
             mComposer.setLayerPerFrameMetadata(mDisplayId, mId, perFrameMetadatas));
 
     if (validTypes & HdrMetadata::HDR10PLUS) {
-        if (CC_UNLIKELY(mHdrMetadata.hdr10plus.size() == 0)) {
-            return Error::BAD_PARAMETER;
-        }
 
         std::vector<Hwc2::PerFrameMetadataBlob> perFrameMetadataBlobs;
         perFrameMetadataBlobs.push_back(

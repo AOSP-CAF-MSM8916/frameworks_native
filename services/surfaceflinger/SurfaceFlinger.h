@@ -1201,7 +1201,6 @@ private:
 
     std::atomic<nsecs_t> mExpectedPresentTime = 0;
     nsecs_t mScheduledPresentTime = 0;
-    hal::Vsync mHWCVsyncPendingState = hal::Vsync::DISABLE;
 
     /* ------------------------------------------------------------------------
      * Misc
