@@ -541,12 +541,9 @@ status_t HWComposer::getDeviceCompositionChanges(
     error = hwcDisplay->getRequests(&displayRequests, &layerRequests);
     RETURN_IF_HWC_ERROR_FOR("getRequests", error, displayId, BAD_INDEX);
 
-    DeviceRequestedChanges::ClientTargetProperty clientTargetProperty;
-    error = hwcDisplay->getClientTargetProperty(&clientTargetProperty);
-
     outChanges->emplace(DeviceRequestedChanges{std::move(changedTypes), std::move(displayRequests),
-                                               std::move(layerRequests),
-                                               std::move(clientTargetProperty)});
+                                               std::move(layerRequests)});
+
     error = hwcDisplay->acceptChanges();
     RETURN_IF_HWC_ERROR_FOR("acceptChanges", error, displayId, BAD_INDEX);
 

@@ -672,11 +672,6 @@ Error Display::setContentType(ContentType contentType) {
     return static_cast<Error>(intError);
 }
 
-Error Display::getClientTargetProperty(ClientTargetProperty* outClientTargetProperty) {
-    const auto error = mComposer.getClientTargetProperty(mId, outClientTargetProperty);
-    return static_cast<Error>(error);
-}
-
 // For use by Device
 
 void Display::setConnected(bool connected) {

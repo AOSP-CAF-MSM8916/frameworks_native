@@ -259,7 +259,6 @@ void Display::chooseCompositionStrategy() {
         applyChangedTypesToLayers(changes->changedTypes);
         applyDisplayRequests(changes->displayRequests);
         applyLayerRequestsToLayers(changes->layerRequests);
-        applyClientTargetRequests(changes->clientTargetProperty);
     }
 
     // Determine what type of composition we are doing from the final state
@@ -325,16 +324,6 @@ void Display::applyLayerRequestsToLayers(const LayerRequests& layerRequests) {
                     static_cast<Hwc2::IComposerClient::LayerRequest>(it->second));
         }
     }
-}
-
-void Display::applyClientTargetRequests(const ClientTargetProperty& clientTargetProperty) {
-    if (clientTargetProperty.dataspace == ui::Dataspace::UNKNOWN) {
-        return;
-    }
-    auto outputState = editState();
-    outputState.dataspace = clientTargetProperty.dataspace;
-    getRenderSurface()->setBufferDataspace(clientTargetProperty.dataspace);
-    getRenderSurface()->setBufferPixelFormat(clientTargetProperty.pixelFormat);
 }
 
 compositionengine::Output::FrameFences Display::presentAndGetFrameFences() {
