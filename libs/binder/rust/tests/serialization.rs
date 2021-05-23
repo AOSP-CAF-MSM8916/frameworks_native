@@ -18,14 +18,13 @@
 //! access.
 
 use binder::declare_binder_interface;
+use binder::parcel::ParcelFileDescriptor;
 use binder::{
-    Binder, ExceptionCode, Interface, Parcel, Result, SpIBinder, Status,
+    Binder, BinderFeatures, ExceptionCode, Interface, Parcel, Result, SpIBinder, Status,
     StatusCode, TransactionCode,
 };
-use binder::parcel::ParcelFileDescriptor;
 
 use std::ffi::{c_void, CStr, CString};
-use std::panic::{self, AssertUnwindSafe};
 use std::sync::Once;
 
 #[allow(
@@ -41,6 +40,41 @@ mod bindings {
     include!(concat!(env!("OUT_DIR"), "/bindings.rs"));
 }
 
+macro_rules! assert_eq {
+    ($left:expr, $right:expr $(,)?) => {
+        match (&$left, &$right) {
+            (left, right) => {
+                if *left != *right {
+                    eprintln!(
+                        "assertion failed: `{:?}` == `{:?}`, {}:{}:{}",
+                        &*left,
+                        &*right,
+                        file!(),
+                        line!(),
+                        column!()
+                    );
+                    return Err(StatusCode::FAILED_TRANSACTION);
+                }
+            }
+        }
+    };
+}
+
+macro_rules! assert {
+    ($expr:expr) => {
+        if !$expr {
+            eprintln!(
+                "assertion failed: `{:?}`, {}:{}:{}",
+                $expr,
+                file!(),
+                line!(),
+                column!()
+            );
+            return Err(StatusCode::FAILED_TRANSACTION);
+        }
+    };
+}
+
 static SERVICE_ONCE: Once = Once::new();
 static mut SERVICE: Option<SpIBinder> = None;
 
@@ -51,7 +85,7 @@ static mut SERVICE: Option<SpIBinder> = None;
 pub extern "C" fn rust_service() -> *mut c_void {
     unsafe {
         SERVICE_ONCE.call_once(|| {
-            SERVICE = Some(BnReadParcelTest::new_binder(()).as_binder());
+            SERVICE = Some(BnReadParcelTest::new_binder((), BinderFeatures::default()).as_binder());
         });
         SERVICE.as_ref().unwrap().as_raw().cast()
     }
@@ -73,22 +107,13 @@ impl ReadParcelTest for BpReadParcelTest {}
 
 impl ReadParcelTest for () {}
 
+#[allow(clippy::float_cmp)]
 fn on_transact(
     _service: &dyn ReadParcelTest,
     code: TransactionCode,
     parcel: &Parcel,
     reply: &mut Parcel,
 ) -> Result<()> {
-    panic::catch_unwind(AssertUnwindSafe(|| transact_inner(code, parcel, reply))).unwrap_or_else(
-        |e| {
-            eprintln!("Failure in Rust: {:?}", e.downcast_ref::<String>());
-            Err(StatusCode::FAILED_TRANSACTION)
-        },
-    )
-}
-
-#[allow(clippy::float_cmp)]
-fn transact_inner(code: TransactionCode, parcel: &Parcel, reply: &mut Parcel) -> Result<()> {
     match code {
         bindings::Transaction_TEST_BOOL => {
             assert_eq!(parcel.read::<bool>()?, true);
@@ -296,7 +321,7 @@ fn transact_inner(code: TransactionCode, parcel: &Parcel, reply: &mut Parcel) ->
             ))?;
         }
         bindings::Transaction_TEST_FAIL => {
-            panic!("Testing expected failure");
+            assert!(false);
         }
         _ => return Err(StatusCode::UNKNOWN_TRANSACTION),
     }

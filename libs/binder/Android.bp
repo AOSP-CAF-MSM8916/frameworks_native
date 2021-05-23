@@ -22,15 +22,27 @@ cc_library_headers {
 
     header_libs: [
         "libbase_headers",
+        "libbinder_headers_platform_shared",
         "libcutils_headers",
         "libutils_headers",
     ],
     export_header_lib_headers: [
         "libbase_headers",
+        "libbinder_headers_platform_shared",
         "libcutils_headers",
         "libutils_headers",
     ],
+    apex_available: [
+        "//apex_available:platform",
+        "com.android.media",
+        "com.android.media.swcodec",
+    ],
     min_sdk_version: "29",
+    target: {
+        darwin: {
+            enabled: false,
+        },
+    },
 }
 
 // These interfaces are android-specific implementation unrelated to binder
@@ -39,17 +51,12 @@ cc_library_headers {
 // Currently, these are only on system android (not vendor, not host)
 // TODO(b/183654927) - move these into separate libraries
 libbinder_device_interface_sources = [
-    "ActivityManager.cpp",
-    "AppOpsManager.cpp",
-    "IActivityManager.cpp",
-    "IAppOpsCallback.cpp",
-    "IAppOpsService.cpp",
-    "IMediaResourceMonitor.cpp",
     "IPermissionController.cpp",
-    "IUidObserver.cpp",
     "PermissionCache.cpp",
     "PermissionController.cpp",
-    "IpPrefix.cpp",
+]
+libbinder_no_vendor_interface_sources = [
+    ":packagemanager_aidl",
 ]
 
 cc_library {
@@ -76,7 +83,7 @@ cc_library {
     // or dessert updates. Instead, apex users should use libbinder_ndk.
     apex_available: [
         "//apex_available:platform",
-        // TODO(b/139016109) remove these three
+        // TODO(b/166468760) remove these three
         "com.android.media.swcodec",
         "test_com.android.media.swcodec",
     ],
@@ -97,16 +104,21 @@ cc_library {
         "MemoryDealer.cpp",
         "MemoryHeapBase.cpp",
         "Parcel.cpp",
+        "ParcelableHolder.cpp",
         "ParcelFileDescriptor.cpp",
         "PersistableBundle.cpp",
         "ProcessState.cpp",
+        "RpcAddress.cpp",
+        "RpcSession.cpp",
+        "RpcServer.cpp",
+        "RpcState.cpp",
         "Static.cpp",
         "Stability.cpp",
         "Status.cpp",
         "TextOutput.cpp",
-        ":packagemanager_aidl",
+        "Utils.cpp",
         ":libbinder_aidl",
-    ],
+    ] + libbinder_no_vendor_interface_sources,
 
     target: {
         android: {
@@ -118,7 +130,10 @@ cc_library {
             },
         },
         vendor: {
-            exclude_srcs: libbinder_device_interface_sources,
+            exclude_srcs: libbinder_device_interface_sources + libbinder_no_vendor_interface_sources,
+        },
+        darwin: {
+            enabled: false,
         },
     },
 
@@ -126,11 +141,18 @@ cc_library {
         export_aidl_headers: true,
     },
 
+    // TODO(b/142684679): for com.android.media which is compiled
+    // as vendor and used as system code.
+    use_apex_name_macro: true,
+
     cflags: [
         "-Wall",
         "-Wextra",
+        "-Wextra-semi",
         "-Werror",
         "-Wzero-as-null-pointer-constant",
+        "-DANDROID_BASE_UNIQUE_FD_DISABLE_IMPLICIT_CONVERSION",
+        "-DANDROID_UTILS_REF_BASE_DISABLE_IMPLICIT_CONSTRUCTION",
     ],
     product_variables: {
         binder32bit: {
@@ -157,6 +179,32 @@ cc_library {
         misc_undefined: ["integer"],
     },
     min_sdk_version: "29",
+
+    tidy: true,
+    tidy_flags: [
+        // Only check our headers
+        "--header-filter=^.*frameworks/native/libs/binder/.*.h$",
+    ],
+    tidy_checks: [
+        "-performance-no-int-to-ptr",
+    ],
+    tidy_checks_as_errors: [
+        // Explicitly list the checks that should not occur in this module.
+        "abseil-*",
+        "android-*",
+        "bugprone-*",
+        "cert-*",
+        "clang-analyzer-*",
+        "google-*",
+        "misc-*",
+        "performance*",
+        "portability*",
+    ],
+
+    pgo: {
+        sampling: true,
+        profile_file: "libbinder/libbinder.profdata",
+    },
 }
 
 // AIDL interface between libbinder and framework.jar
@@ -166,6 +214,7 @@ filegroup {
         "aidl/android/os/IClientCallback.aidl",
         "aidl/android/os/IServiceCallback.aidl",
         "aidl/android/os/IServiceManager.aidl",
+        "aidl/android/os/ServiceDebugInfo.aidl",
     ],
     path: "aidl",
 }
@@ -227,13 +276,21 @@ cc_library {
     ],
 }
 
-// TODO(b/183654927): initially empty lib to work around some merge conflicts
 cc_library {
     name: "libactivitymanager_aidl",
-    srcs: [],
+    srcs: [
+        "ActivityManager.cpp",
+        "IActivityManager.cpp",
+        "IUidObserver.cpp",
+        ":activity_manager_procstate_aidl",
+    ],
+    export_include_dirs: ["include_activitymanager"],
     shared_libs: [
         "libbinder",
         "libutils",
         "liblog",
     ],
+    aidl: {
+        export_aidl_headers: true,
+    },
 }

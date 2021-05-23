@@ -16,26 +16,30 @@
 
 //! Trait definitions for binder objects
 
-use crate::error::{status_t, Result};
+use crate::error::{status_t, Result, StatusCode};
 use crate::parcel::Parcel;
-use crate::proxy::{DeathRecipient, SpIBinder};
+use crate::proxy::{DeathRecipient, SpIBinder, WpIBinder};
 use crate::sys;
 
+use std::borrow::Borrow;
+use std::cmp::Ordering;
 use std::ffi::{c_void, CStr, CString};
+use std::fmt;
+use std::marker::PhantomData;
+use std::ops::Deref;
 use std::os::raw::c_char;
 use std::os::unix::io::AsRawFd;
 use std::ptr;
 
 /// Binder action to perform.
 ///
-/// This must be a number between [`IBinder::FIRST_CALL_TRANSACTION`] and
-/// [`IBinder::LAST_CALL_TRANSACTION`].
+/// This must be a number between [`FIRST_CALL_TRANSACTION`] and
+/// [`LAST_CALL_TRANSACTION`].
 pub type TransactionCode = u32;
 
 /// Additional operation flags.
 ///
-/// Can be either 0 for a normal RPC, or [`IBinder::FLAG_ONEWAY`] for a
-/// one-way RPC.
+/// `FLAG_*` values.
 pub type TransactionFlags = u32;
 
 /// Super-trait for Binder interfaces.
@@ -45,10 +49,30 @@ pub type TransactionFlags = u32;
 /// interfaces) must implement this trait.
 ///
 /// This is equivalent `IInterface` in C++.
-pub trait Interface {
+pub trait Interface: Send {
     /// Convert this binder object into a generic [`SpIBinder`] reference.
     fn as_binder(&self) -> SpIBinder {
         panic!("This object was not a Binder object and cannot be converted into an SpIBinder.")
+    }
+}
+
+/// Interface stability promise
+///
+/// An interface can promise to be a stable vendor interface ([`Vintf`]), or
+/// makes no stability guarantees ([`Local`]). [`Local`] is
+/// currently the default stability.
+pub enum Stability {
+    /// Default stability, visible to other modules in the same compilation
+    /// context (e.g. modules on system.img)
+    Local,
+
+    /// A Vendor Interface Object, which promises to be stable
+    Vintf,
+}
+
+impl Default for Stability {
+    fn default() -> Self {
+        Stability::Local
     }
 }
 
@@ -62,7 +86,7 @@ pub trait Interface {
 /// the AIDL backend, users need only implement the high-level AIDL-defined
 /// interface. The AIDL compiler then generates a container struct that wraps
 /// the user-defined service and implements `Remotable`.
-pub trait Remotable: Sync {
+pub trait Remotable: Send + Sync {
     /// The Binder interface descriptor string.
     ///
     /// This string is a unique identifier for a Binder interface, and should be
@@ -81,23 +105,32 @@ pub trait Remotable: Sync {
     fn get_class() -> InterfaceClass;
 }
 
-/// Interface of binder local or remote objects.
+/// First transaction code available for user commands (inclusive)
+pub const FIRST_CALL_TRANSACTION: TransactionCode = sys::FIRST_CALL_TRANSACTION;
+/// Last transaction code available for user commands (inclusive)
+pub const LAST_CALL_TRANSACTION: TransactionCode = sys::LAST_CALL_TRANSACTION;
+
+/// Corresponds to TF_ONE_WAY -- an asynchronous call.
+pub const FLAG_ONEWAY: TransactionFlags = sys::FLAG_ONEWAY;
+/// Corresponds to TF_CLEAR_BUF -- clear transaction buffers after call is made.
+pub const FLAG_CLEAR_BUF: TransactionFlags = sys::FLAG_CLEAR_BUF;
+/// Set to the vendor flag if we are building for the VNDK, 0 otherwise
+pub const FLAG_PRIVATE_LOCAL: TransactionFlags = sys::FLAG_PRIVATE_LOCAL;
+
+/// Internal interface of binder local or remote objects for making
+/// transactions.
 ///
-/// This trait corresponds to the interface of the C++ `IBinder` class.
-pub trait IBinder {
-    /// First transaction code available for user commands (inclusive)
-    const FIRST_CALL_TRANSACTION: TransactionCode = sys::FIRST_CALL_TRANSACTION;
-    /// Last transaction code available for user commands (inclusive)
-    const LAST_CALL_TRANSACTION: TransactionCode = sys::LAST_CALL_TRANSACTION;
-
-    /// Corresponds to TF_ONE_WAY -- an asynchronous call.
-    const FLAG_ONEWAY: TransactionFlags = sys::FLAG_ONEWAY;
-
+/// This trait corresponds to the parts of the interface of the C++ `IBinder`
+/// class which are internal implementation details.
+pub trait IBinderInternal: IBinder {
     /// Is this object still alive?
     fn is_binder_alive(&self) -> bool;
 
     /// Send a ping transaction to this object
     fn ping_binder(&mut self) -> Result<()>;
+
+    /// Indicate that the service intends to receive caller security contexts.
+    fn set_requesting_sid(&mut self, enable: bool);
 
     /// Dump this object to the given file handle
     fn dump<F: AsRawFd>(&mut self, fp: &F, args: &[&str]) -> Result<()>;
@@ -113,19 +146,24 @@ pub trait IBinder {
     /// * `data` - [`Parcel`] with input data
     /// * `reply` - Optional [`Parcel`] for reply data
     /// * `flags` - Transaction flags, e.g. marking the transaction as
-    /// asynchronous ([`FLAG_ONEWAY`](IBinder::FLAG_ONEWAY))
+    ///   asynchronous ([`FLAG_ONEWAY`](FLAG_ONEWAY))
     fn transact<F: FnOnce(&mut Parcel) -> Result<()>>(
         &self,
         code: TransactionCode,
         flags: TransactionFlags,
         input_callback: F,
     ) -> Result<Parcel>;
+}
 
+/// Interface of binder local or remote objects.
+///
+/// This trait corresponds to the parts of the interface of the C++ `IBinder`
+/// class which are public.
+pub trait IBinder {
     /// Register the recipient for a notification if this binder
     /// goes away. If this binder object unexpectedly goes away
     /// (typically because its hosting process has been killed),
-    /// then DeathRecipient::binder_died() will be called with a reference
-    /// to this.
+    /// then the `DeathRecipient`'s callback will be called.
     ///
     /// You will only receive death notifications for remote binders,
     /// as local binders by definition can't die without you dying as well.
@@ -133,11 +171,6 @@ pub trait IBinder {
     /// INVALID_OPERATION code being returned and nothing happening.
     ///
     /// This link always holds a weak reference to its recipient.
-    ///
-    /// You will only receive a weak reference to the dead
-    /// binder. You should not try to promote this to a strong reference.
-    /// (Nor should you need to, as there is nothing useful you can
-    /// directly do with it now that it has passed on.)
     fn link_to_death(&mut self, recipient: &mut DeathRecipient) -> Result<()>;
 
     /// Remove a previously registered death notification.
@@ -213,7 +246,8 @@ impl InterfaceClass {
             // the number of u16 elements before the null terminator.
 
             let raw_descriptor: *const c_char = sys::AIBinder_Class_getDescriptor(self.0);
-            CStr::from_ptr(raw_descriptor).to_str()
+            CStr::from_ptr(raw_descriptor)
+                .to_str()
                 .expect("Expected valid UTF-8 string from AIBinder_Class_getDescriptor")
                 .into()
         }
@@ -225,6 +259,132 @@ impl From<InterfaceClass> for *const sys::AIBinder_Class {
         class.0
     }
 }
+
+/// Strong reference to a binder object
+pub struct Strong<I: FromIBinder + ?Sized>(Box<I>);
+
+impl<I: FromIBinder + ?Sized> Strong<I> {
+    /// Create a new strong reference to the provided binder object
+    pub fn new(binder: Box<I>) -> Self {
+        Self(binder)
+    }
+
+    /// Construct a new weak reference to this binder
+    pub fn downgrade(this: &Strong<I>) -> Weak<I> {
+        Weak::new(this)
+    }
+}
+
+impl<I: FromIBinder + ?Sized> Clone for Strong<I> {
+    fn clone(&self) -> Self {
+        // Since we hold a strong reference, we should always be able to create
+        // a new strong reference to the same interface type, so try_from()
+        // should never fail here.
+        FromIBinder::try_from(self.0.as_binder()).unwrap()
+    }
+}
+
+impl<I: FromIBinder + ?Sized> Borrow<I> for Strong<I> {
+    fn borrow(&self) -> &I {
+        &self.0
+    }
+}
+
+impl<I: FromIBinder + ?Sized> AsRef<I> for Strong<I> {
+    fn as_ref(&self) -> &I {
+        &self.0
+    }
+}
+
+impl<I: FromIBinder + ?Sized> Deref for Strong<I> {
+    type Target = I;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl<I: FromIBinder + fmt::Debug + ?Sized> fmt::Debug for Strong<I> {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        fmt::Debug::fmt(&**self, f)
+    }
+}
+
+impl<I: FromIBinder + ?Sized> Ord for Strong<I> {
+    fn cmp(&self, other: &Self) -> Ordering {
+        self.0.as_binder().cmp(&other.0.as_binder())
+    }
+}
+
+impl<I: FromIBinder + ?Sized> PartialOrd for Strong<I> {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        self.0.as_binder().partial_cmp(&other.0.as_binder())
+    }
+}
+
+impl<I: FromIBinder + ?Sized> PartialEq for Strong<I> {
+    fn eq(&self, other: &Self) -> bool {
+        self.0.as_binder().eq(&other.0.as_binder())
+    }
+}
+
+impl<I: FromIBinder + ?Sized> Eq for Strong<I> {}
+
+/// Weak reference to a binder object
+#[derive(Debug)]
+pub struct Weak<I: FromIBinder + ?Sized> {
+    weak_binder: WpIBinder,
+    interface_type: PhantomData<I>,
+}
+
+impl<I: FromIBinder + ?Sized> Weak<I> {
+    /// Construct a new weak reference from a strong reference
+    fn new(binder: &Strong<I>) -> Self {
+        let weak_binder = binder.as_binder().downgrade();
+        Weak {
+            weak_binder,
+            interface_type: PhantomData,
+        }
+    }
+
+    /// Upgrade this weak reference to a strong reference if the binder object
+    /// is still alive
+    pub fn upgrade(&self) -> Result<Strong<I>> {
+        self.weak_binder
+            .promote()
+            .ok_or(StatusCode::DEAD_OBJECT)
+            .and_then(FromIBinder::try_from)
+    }
+}
+
+impl<I: FromIBinder + ?Sized> Clone for Weak<I> {
+    fn clone(&self) -> Self {
+        Self {
+            weak_binder: self.weak_binder.clone(),
+            interface_type: PhantomData,
+        }
+    }
+}
+
+impl<I: FromIBinder + ?Sized> Ord for Weak<I> {
+    fn cmp(&self, other: &Self) -> Ordering {
+        self.weak_binder.cmp(&other.weak_binder)
+    }
+}
+
+impl<I: FromIBinder + ?Sized> PartialOrd for Weak<I> {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        self.weak_binder.partial_cmp(&other.weak_binder)
+    }
+}
+
+impl<I: FromIBinder + ?Sized> PartialEq for Weak<I> {
+    fn eq(&self, other: &Self) -> bool {
+        self.weak_binder == other.weak_binder
+    }
+}
+
+impl<I: FromIBinder + ?Sized> Eq for Weak<I> {}
 
 /// Create a function implementing a static getter for an interface class.
 ///
@@ -350,12 +510,12 @@ pub trait InterfaceClassMethods {
 ///     }
 /// }
 /// ```
-pub trait FromIBinder {
+pub trait FromIBinder: Interface {
     /// Try to interpret a generic Binder object as this interface.
     ///
     /// Returns a trait object for the `Self` interface if this object
     /// implements that interface.
-    fn try_from(ibinder: SpIBinder) -> Result<Box<Self>>;
+    fn try_from(ibinder: SpIBinder) -> Result<Strong<Self>>;
 }
 
 /// Trait for transparent Rust wrappers around android C++ native types.
@@ -386,6 +546,28 @@ unsafe impl<T, V: AsNative<T>> AsNative<T> for Option<V> {
     fn as_native_mut(&mut self) -> *mut T {
         self.as_mut().map_or(ptr::null_mut(), |v| v.as_native_mut())
     }
+}
+
+/// The features to enable when creating a native Binder.
+///
+/// This should always be initialised with a default value, e.g.:
+/// ```
+/// # use binder::BinderFeatures;
+/// BinderFeatures {
+///   set_requesting_sid: true,
+///   ..BinderFeatures::default(),
+/// }
+/// ```
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
+pub struct BinderFeatures {
+    /// Indicates that the service intends to receive caller security contexts. This must be true
+    /// for `ThreadState::with_calling_sid` to work.
+    pub set_requesting_sid: bool,
+    // Ensure that clients include a ..BinderFeatures::default() to preserve backwards compatibility
+    // when new fields are added. #[non_exhaustive] doesn't work because it prevents struct
+    // expressions entirely.
+    #[doc(hidden)]
+    pub _non_exhaustive: (),
 }
 
 /// Declare typed interfaces for a binder object.
@@ -464,6 +646,23 @@ macro_rules! declare_binder_interface {
             $interface[$descriptor] {
                 native: $native($on_transact),
                 proxy: $proxy {},
+                stability: $crate::Stability::default(),
+            }
+        }
+    };
+
+    {
+        $interface:path[$descriptor:expr] {
+            native: $native:ident($on_transact:path),
+            proxy: $proxy:ident,
+            stability: $stability:expr,
+        }
+    } => {
+        $crate::declare_binder_interface! {
+            $interface[$descriptor] {
+                native: $native($on_transact),
+                proxy: $proxy {},
+                stability: $stability,
             }
         }
     };
@@ -478,12 +677,33 @@ macro_rules! declare_binder_interface {
     } => {
         $crate::declare_binder_interface! {
             $interface[$descriptor] {
+                native: $native($on_transact),
+                proxy: $proxy {
+                    $($fname: $fty = $finit),*
+                },
+                stability: $crate::Stability::default(),
+            }
+        }
+    };
+
+    {
+        $interface:path[$descriptor:expr] {
+            native: $native:ident($on_transact:path),
+            proxy: $proxy:ident {
+                $($fname:ident: $fty:ty = $finit:expr),*
+            },
+            stability: $stability:expr,
+        }
+    } => {
+        $crate::declare_binder_interface! {
+            $interface[$descriptor] {
                 @doc[concat!("A binder [`Remotable`]($crate::Remotable) that holds an [`", stringify!($interface), "`] object.")]
                 native: $native($on_transact),
                 @doc[concat!("A binder [`Proxy`]($crate::Proxy) that holds an [`", stringify!($interface), "`] remote interface.")]
                 proxy: $proxy {
                     $($fname: $fty = $finit),*
                 },
+                stability: $stability,
             }
         }
     };
@@ -497,6 +717,8 @@ macro_rules! declare_binder_interface {
             proxy: $proxy:ident {
                 $($fname:ident: $fty:ty = $finit:expr),*
             },
+
+            stability: $stability:expr,
         }
     } => {
         #[doc = $proxy_doc]
@@ -530,8 +752,10 @@ macro_rules! declare_binder_interface {
 
         impl $native {
             /// Create a new binder service.
-            pub fn new_binder<T: $interface + Sync + Send + 'static>(inner: T) -> impl $interface {
-                $crate::Binder::new($native(Box::new(inner)))
+            pub fn new_binder<T: $interface + Sync + Send + 'static>(inner: T, features: $crate::BinderFeatures) -> $crate::Strong<dyn $interface> {
+                let mut binder = $crate::Binder::new_with_stability($native(Box::new(inner)), $stability);
+                $crate::IBinderInternal::set_requesting_sid(&mut binder, features.set_requesting_sid);
+                $crate::Strong::new(Box::new(binder))
             }
         }
 
@@ -573,7 +797,7 @@ macro_rules! declare_binder_interface {
         }
 
         impl $crate::FromIBinder for dyn $interface {
-            fn try_from(mut ibinder: $crate::SpIBinder) -> $crate::Result<Box<dyn $interface>> {
+            fn try_from(mut ibinder: $crate::SpIBinder) -> $crate::Result<$crate::Strong<dyn $interface>> {
                 use $crate::AssociateClass;
 
                 let existing_class = ibinder.get_class();
@@ -586,18 +810,20 @@ macro_rules! declare_binder_interface {
                         // associated object as remote, because we can't cast it
                         // into a Rust service object without a matching class
                         // pointer.
-                        return Ok(Box::new(<$proxy as $crate::Proxy>::from_binder(ibinder)?));
+                        return Ok($crate::Strong::new(Box::new(<$proxy as $crate::Proxy>::from_binder(ibinder)?)));
                     }
-                } else if ibinder.associate_class(<$native as $crate::Remotable>::get_class()) {
+                }
+
+                if ibinder.associate_class(<$native as $crate::Remotable>::get_class()) {
                     let service: $crate::Result<$crate::Binder<$native>> =
                         std::convert::TryFrom::try_from(ibinder.clone());
                     if let Ok(service) = service {
                         // We were able to associate with our expected class and
                         // the service is local.
-                        return Ok(Box::new(service));
+                        return Ok($crate::Strong::new(Box::new(service)));
                     } else {
                         // Service is remote
-                        return Ok(Box::new(<$proxy as $crate::Proxy>::from_binder(ibinder)?));
+                        return Ok($crate::Strong::new(Box::new(<$proxy as $crate::Proxy>::from_binder(ibinder)?)));
                     }
                 }
 
@@ -618,6 +844,66 @@ macro_rules! declare_binder_interface {
         impl $crate::parcel::SerializeOption for dyn $interface + '_ {
             fn serialize_option(this: Option<&Self>, parcel: &mut $crate::parcel::Parcel) -> $crate::Result<()> {
                 parcel.write(&this.map($crate::Interface::as_binder))
+            }
+        }
+
+        impl std::fmt::Debug for dyn $interface {
+            fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+                f.pad(stringify!($interface))
+            }
+        }
+
+        /// Convert a &dyn $interface to Strong<dyn $interface>
+        impl std::borrow::ToOwned for dyn $interface {
+            type Owned = $crate::Strong<dyn $interface>;
+            fn to_owned(&self) -> Self::Owned {
+                self.as_binder().into_interface()
+                    .expect(concat!("Error cloning interface ", stringify!($interface)))
+            }
+        }
+    };
+}
+
+/// Declare an AIDL enumeration.
+///
+/// This is mainly used internally by the AIDL compiler.
+#[macro_export]
+macro_rules! declare_binder_enum {
+    {
+        $enum:ident : $backing:ty {
+            $( $name:ident = $value:expr, )*
+        }
+    } => {
+        #[derive(Debug, Default, Copy, Clone, PartialOrd, Ord, PartialEq, Eq, Hash)]
+        pub struct $enum(pub $backing);
+        impl $enum {
+            $( pub const $name: Self = Self($value); )*
+        }
+
+        impl $crate::parcel::Serialize for $enum {
+            fn serialize(&self, parcel: &mut $crate::parcel::Parcel) -> $crate::Result<()> {
+                parcel.write(&self.0)
+            }
+        }
+
+        impl $crate::parcel::SerializeArray for $enum {
+            fn serialize_array(slice: &[Self], parcel: &mut $crate::parcel::Parcel) -> $crate::Result<()> {
+                let v: Vec<$backing> = slice.iter().map(|x| x.0).collect();
+                <$backing as binder::parcel::SerializeArray>::serialize_array(&v[..], parcel)
+            }
+        }
+
+        impl $crate::parcel::Deserialize for $enum {
+            fn deserialize(parcel: &$crate::parcel::Parcel) -> $crate::Result<Self> {
+                parcel.read().map(Self)
+            }
+        }
+
+        impl $crate::parcel::DeserializeArray for $enum {
+            fn deserialize_array(parcel: &$crate::parcel::Parcel) -> $crate::Result<Option<Vec<Self>>> {
+                let v: Option<Vec<$backing>> =
+                    <$backing as binder::parcel::DeserializeArray>::deserialize_array(parcel)?;
+                Ok(v.map(|v| v.into_iter().map(Self).collect()))
             }
         }
     };

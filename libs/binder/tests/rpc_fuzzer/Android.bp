@@ -1,0 +1,31 @@
+cc_fuzz {
+    name: "binder_rpc_fuzzer",
+    host_supported: true,
+
+    fuzz_config: {
+        cc: ["smoreland@google.com"],
+    },
+
+    srcs: [
+        "main.cpp",
+    ],
+    static_libs: [
+        "libbase",
+        "libcutils",
+        "liblog",
+        "libutils",
+    ],
+
+    target: {
+        android: {
+            shared_libs: [
+                "libbinder",
+            ],
+        },
+        host: {
+            static_libs: [
+                "libbinder",
+            ],
+        },
+    },
+}
